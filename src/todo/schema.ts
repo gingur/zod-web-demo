@@ -7,6 +7,14 @@ import { z } from 'zod';
  * `.describe()` text included), and validates whatever comes back.
  */
 
+/*
+ * A title is one line, as in TodoMVC's single-line inputs. Titles are quoted
+ * into the model's prompts, and a line break in one could forge a line such
+ * as "Request: ..." there.
+ */
+const ONE_LINE = /^[^\r\n]*$/;
+const ONE_LINE_MESSAGE = 'A title is a single line.';
+
 // ---- Todo context: what the model is told about the list on every turn ----
 
 export const FILTERS = ['all', 'active', 'completed'] as const;
@@ -17,7 +25,12 @@ const filterSchema = z
 const todoSchema = z
   .object({
     id: z.string().describe('Stable id, e.g. "t1". Tools refer to a todo by this id.'),
-    title: z.string().trim().min(1).describe('What the todo says.'),
+    title: z
+      .string()
+      .trim()
+      .min(1)
+      .regex(ONE_LINE, ONE_LINE_MESSAGE)
+      .describe('What the todo says.'),
     completed: z.boolean().describe('true once the todo is done.'),
   })
   .describe('One TodoMVC item: nothing more, nothing less.');
@@ -59,6 +72,7 @@ const addTodo = tool(
       .string()
       .trim()
       .min(1, "A new todo's title can't be empty")
+      .regex(ONE_LINE, ONE_LINE_MESSAGE)
       .describe('The text of the one new todo, short, e.g. "Buy eggs".'),
   }),
 );
@@ -77,6 +91,7 @@ const editTodo = tool(
       .string()
       .trim()
       .min(1, 'A title cannot be empty; to remove a todo, use delete_todo.')
+      .regex(ONE_LINE, ONE_LINE_MESSAGE)
       .describe('The new text of the todo. Never empty.'),
   }),
 );

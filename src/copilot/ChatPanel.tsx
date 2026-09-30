@@ -149,7 +149,9 @@ export function ChatPanel(props: ChatPanelProps) {
             )}
             <button
               type="button"
-              className="justify-self-start text-xs text-muted-foreground underline"
+              className="justify-self-start text-xs text-muted-foreground underline disabled:opacity-50"
+              // A load in flight can't be cancelled, and would overwrite this choice when it lands.
+              disabled={engine.kind === 'loading'}
               onClick={props.onUseScripted}
             >
               Use scripted mode instead

@@ -42,7 +42,7 @@ export const contextSchema = z
     filter: filterSchema.describe('Which todos the list is currently showing.'),
   })
   .describe('The todo list as it is right now.');
-export type TodoContext = z.infer<typeof contextSchema>;
+type TodoContext = z.infer<typeof contextSchema>;
 
 export interface TodoState extends TodoContext {
   /** Next id suffix. App-internal, never sent to the model. */

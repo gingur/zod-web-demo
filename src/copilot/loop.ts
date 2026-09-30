@@ -36,7 +36,7 @@ export type AssistantEvent =
   | { kind: 'rejected'; attempt: number; errors: string[] };
 
 type Checked<T> = { ok: true; value: T } | { ok: false; errors: string[] };
-export type Check<T> = (text: string) => Checked<T>;
+type Check<T> = (text: string) => Checked<T>;
 
 type Generated<T> =
   | { status: 'ok'; value: T; attempts: number }
@@ -50,7 +50,7 @@ export function formatIssues(issues: readonly z.core.$ZodIssue[]): string[] {
 }
 
 /** Parses JSON, then validates it with a Zod schema. */
-export function parseJson<T>(schema: z.ZodType<T>, text: string): Checked<T> {
+function parseJson<T>(schema: z.ZodType<T>, text: string): Checked<T> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);

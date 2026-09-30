@@ -1,7 +1,7 @@
 import type { InitProgressReport, MLCEngineInterface } from '@mlc-ai/web-llm';
 import type { GenerateRequest, ModelClient } from './loop';
 
-export interface ModelOption {
+interface ModelOption {
   id: string;
   label: string;
   approxDownload: string;
@@ -63,7 +63,6 @@ export async function loadWebLLM(
   }
 
   return {
-    label: option.label,
     async generate({ messages, decoderSchema, onText, signal }: GenerateRequest): Promise<string> {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       const onAbort = () => engine.interruptGenerate();

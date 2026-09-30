@@ -1,123 +1,48 @@
-import {
-  forwardRef,
-  type ButtonHTMLAttributes,
-  type HTMLAttributes,
-  type InputHTMLAttributes,
-  type SelectHTMLAttributes,
-  type TextareaHTMLAttributes,
+import type {
+  ButtonHTMLAttributes,
+  HTMLAttributes,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
 } from 'react';
 import { cn } from '@/lib/utils';
 
-type ButtonVariant = 'default' | 'outline' | 'ghost' | 'accent' | 'destructive';
-type ButtonSize = 'default' | 'sm' | 'icon';
+type ButtonVariant = 'default' | 'outline' | 'accent';
 
 const buttonVariants: Record<ButtonVariant, string> = {
   default: 'bg-primary text-primary-foreground hover:bg-primary/90',
   outline: 'border border-border bg-card hover:bg-muted',
-  ghost: 'hover:bg-muted',
   accent: 'bg-accent text-white hover:bg-accent/90',
-  destructive: 'bg-destructive text-white hover:bg-destructive/90',
-};
-const buttonSizes: Record<ButtonSize, string> = {
-  default: 'h-9 px-4 text-sm',
-  sm: 'h-8 px-3 text-xs',
-  icon: 'h-8 w-8',
 };
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
-  size?: ButtonSize;
 }
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'default', size = 'default', type = 'button', ...props }, ref) => (
+export function Button({ className, variant = 'default', type = 'button', ...props }: ButtonProps) {
+  return (
     <button
-      ref={ref}
       type={type}
       className={cn(
-        'inline-flex items-center justify-center gap-1.5 rounded-md font-medium whitespace-nowrap transition-colors',
+        'inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-4 text-sm font-medium whitespace-nowrap transition-colors',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50',
         buttonVariants[variant],
-        buttonSizes[size],
         className,
       )}
       {...props}
     />
-  ),
-);
-Button.displayName = 'Button';
+  );
+}
 
 const fieldClass =
   'w-full rounded-md border border-border bg-card px-3 text-sm shadow-xs transition-colors placeholder:text-muted-foreground ' +
-  'focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-50 ' +
-  'aria-invalid:border-destructive aria-invalid:outline-destructive';
+  'focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-50';
 
-export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
-  ({ className, ...props }, ref) => (
-    <input ref={ref} className={cn(fieldClass, 'h-9', className)} {...props} />
-  ),
-);
-Input.displayName = 'Input';
-
-export const Textarea = forwardRef<
-  HTMLTextAreaElement,
-  TextareaHTMLAttributes<HTMLTextAreaElement>
->(({ className, ...props }, ref) => (
-  <textarea
-    ref={ref}
-    className={cn(fieldClass, 'min-h-16 resize-none py-2', className)}
-    {...props}
-  />
-));
-Textarea.displayName = 'Textarea';
-
-export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
-  ({ className, ...props }, ref) => (
-    <select ref={ref} className={cn(fieldClass, 'h-9 pr-8', className)} {...props} />
-  ),
-);
-NativeSelect.displayName = 'NativeSelect';
-
-export function Label({
-  className,
-  ...props
-}: HTMLAttributes<HTMLLabelElement> & { htmlFor?: string }) {
-  return <label className={cn('text-sm font-medium leading-none', className)} {...props} />;
+export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={cn(fieldClass, 'min-h-16 resize-none py-2', className)} {...props} />;
 }
 
-export function Switch({
-  checked,
-  onCheckedChange,
-  id,
-  ...rest
-}: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  id?: string;
-  'aria-label'?: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      id={id}
-      aria-checked={checked}
-      aria-label={rest['aria-label']}
-      onClick={() => onCheckedChange(!checked)}
-      className={cn(
-        'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-        checked ? 'bg-accent' : 'bg-border',
-      )}
-    >
-      <span
-        className={cn(
-          'inline-block h-4 w-4 rounded-full bg-white shadow transition-transform',
-          checked ? 'translate-x-4.5' : 'translate-x-0.5',
-        )}
-      />
-    </button>
-  );
+export function NativeSelect({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select className={cn(fieldClass, 'h-9 pr-8', className)} {...props} />;
 }
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
@@ -129,36 +54,17 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   );
 }
 
-export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex flex-col gap-1 px-5 pt-5', className)} {...props} />;
-}
-
-export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return <h3 className={cn('text-base font-semibold leading-none', className)} {...props} />;
-}
-
-export function CardDescription({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn('text-sm text-muted-foreground', className)} {...props} />;
-}
-
-export function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('px-5 pb-5 pt-4', className)} {...props} />;
-}
-
-type BadgeVariant = 'default' | 'outline' | 'success' | 'destructive' | 'warning';
+type BadgeVariant = 'success' | 'warning';
 const badgeVariants: Record<BadgeVariant, string> = {
-  default: 'bg-muted text-foreground',
-  outline: 'border border-border text-muted-foreground',
   success: 'bg-accent-soft text-accent',
-  destructive: 'bg-destructive-soft text-destructive',
   warning: 'bg-changed text-amber-800',
 };
 
 export function Badge({
   className,
-  variant = 'default',
+  variant,
   ...props
-}: HTMLAttributes<HTMLSpanElement> & { variant?: BadgeVariant }) {
+}: HTMLAttributes<HTMLSpanElement> & { variant: BadgeVariant }) {
   return (
     <span
       className={cn(
@@ -171,11 +77,11 @@ export function Badge({
   );
 }
 
-export function Progress({ value, className }: { value: number; className?: string }) {
+export function Progress({ value }: { value: number }) {
   const pct = Math.round(Math.min(Math.max(value, 0), 1) * 100);
   return (
     <div
-      className={cn('h-1.5 w-full overflow-hidden rounded-full bg-muted', className)}
+      className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
       role="progressbar"
       aria-valuenow={pct}
       aria-valuemin={0}

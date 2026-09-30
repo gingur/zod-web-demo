@@ -1,88 +1,102 @@
-import type { Campaign } from '@/schema/campaign';
+import { TOOLS, type AssistantReply, type Call, type Todo } from '@/todo/schema';
 import type { ChatMessage, GenerateRequest, ModelClient } from './loop';
+import { REQUEST_PREFIX, STATE_HEADER } from './prompt';
 
-type Responder = (current: Campaign, attempt: number) => unknown;
+type Responder = (todos: readonly Todo[]) => AssistantReply;
 
-export interface SuggestedPrompt {
+interface SuggestedPrompt {
   text: string;
-  /** What the scripted model returns on each attempt, used only without WebGPU. */
+  /** What the scripted model returns on each attempt, used only in scripted mode. */
   script: readonly Responder[];
 }
 
 export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
   {
-    text: 'Run this on mobile only, and bump the discount to 15% with the code SAVE15.',
+    text: 'Add eggs and bread, and mark buy milk as done.',
     script: [
-      // First attempt keeps the exit-intent trigger, which the cross-field rule rejects.
-      (c) => ({
-        ...c,
-        targeting: { ...c.targeting, devices: ['mobile'] },
-        offer: {
-          ...c.offer,
-          discountPercent: 15,
-          code: 'SAVE15',
-          headline: 'Get 15% off your first order',
-        },
+      // First attempt guesses an id instead of copying it; the tool rejects it.
+      () => ({
+        reply: "Added eggs and bread, and marked 'Buy milk' as done.",
+        calls: [
+          { tool: 'add_todo', args: { title: 'Eggs' } },
+          { tool: 'add_todo', args: { title: 'Bread' } },
+          { tool: 'toggle_todo', args: { id: 'buy-milk' } },
+        ],
       }),
-      (c) => ({
-        ...c,
-        trigger: { ...c.trigger, type: 'time_on_page', delaySeconds: 8 },
-        targeting: { ...c.targeting, devices: ['mobile'] },
-        offer: {
-          ...c.offer,
-          discountPercent: 15,
-          code: 'SAVE15',
-          headline: 'Get 15% off your first order',
-        },
+      (todos) => {
+        const milk = todos.find((t) => t.title.toLowerCase() === 'buy milk');
+        const calls: Call[] = [
+          { tool: 'add_todo', args: { title: 'Eggs' } },
+          { tool: 'add_todo', args: { title: 'Bread' } },
+        ];
+        let reply: string;
+        if (milk === undefined) {
+          reply =
+            "Added eggs and bread. I couldn't find 'Buy milk' in your list, so I left that part.";
+        } else if (milk.completed) {
+          reply = "Added eggs and bread. 'Buy milk' was already done.";
+        } else {
+          // toggle_todo flips, so only call it when there is something to mark done.
+          reply = "Added eggs and bread, and marked 'Buy milk' as done.";
+          calls.push({ tool: 'toggle_todo', args: { id: milk.id } });
+        }
+        return { reply, calls };
+      },
+    ],
+  },
+  {
+    text: "Clear the finished ones and show me what's left.",
+    script: [
+      (): AssistantReply => ({
+        reply: 'Cleared your completed todos and switched the view to active ones.',
+        calls: [
+          { tool: 'clear_completed', args: {} },
+          { tool: 'set_filter', args: { filter: 'active' } },
+        ],
       }),
     ],
   },
   {
-    text: 'Only show it to visitors from Instagram with more than $50 in their cart.',
+    text: 'What can you do?',
     script: [
-      (c) => ({
-        ...c,
-        audienceRules: [
-          { attribute: 'utm_source', operator: 'equals', value: 'instagram' },
-          { attribute: 'cart_value', operator: 'greater_than', value: '$50' },
-        ],
-      }),
-      (c) => ({
-        ...c,
-        audienceRules: [
-          { attribute: 'utm_source', operator: 'equals', value: 'instagram' },
-          { attribute: 'cart_value', operator: 'greater_than', value: '50' },
-        ],
+      () => ({
+        reply: `I can do anything the app's own controls can: ${TOOLS.map((t) => t.name.replace('_', ' ')).join(', ')}. Just tell me what you need.`,
+        calls: [],
       }),
     ],
   },
   {
-    text: 'Never show it on checkout or account pages, and run it for the first two weeks of November.',
+    text: 'Write me a poem about cats.',
     script: [
-      (c) => ({
-        ...c,
-        targeting: { ...c.targeting, excludedPaths: ['/checkout', '/account'] },
-        schedule: { start: '2026-11-01', end: '2026-11-14' },
+      () => ({
+        reply:
+          "Sorry, I can only help with your todo list. I could add 'Write a poem about cats' as a todo, if you like.",
+        calls: [],
       }),
     ],
   },
 ];
 
-const CURRENT_MARKER = 'Current configuration:\n';
-const REQUEST_MARKER = '\n\nRequest: ';
+const STATE_MARKER = `${STATE_HEADER}\n`;
+const REQUEST_MARKER = `\n${REQUEST_PREFIX}`;
 
-function parseFirstUserMessage(messages: readonly ChatMessage[]): {
-  current: Campaign;
+/** Reads the list and the request back out of the latest turn's user message. */
+function parseTurn(messages: readonly ChatMessage[]): {
+  todos: readonly Todo[];
   request: string;
+  attempt: number;
 } {
-  const first = messages.find((m) => m.role === 'user');
-  if (first === undefined) throw new Error('Scripted model: no user message');
-  const start = first.content.indexOf(CURRENT_MARKER);
-  const split = first.content.indexOf(REQUEST_MARKER);
-  if (start === -1 || split === -1) throw new Error('Scripted model: unexpected prompt format');
+  let index = messages.length - 1;
+  while (index >= 0 && !messages[index]?.content.startsWith(STATE_MARKER)) index--;
+  const turn = messages[index];
+  if (turn === undefined) throw new Error('Scripted model: unexpected prompt format');
+  const { content } = turn;
+  // The list is one JSON line, right after the marker.
+  const listEnd = content.indexOf('\n', STATE_MARKER.length);
   return {
-    current: JSON.parse(first.content.slice(start + CURRENT_MARKER.length, split)) as Campaign,
-    request: first.content.slice(split + REQUEST_MARKER.length).trim(),
+    todos: JSON.parse(content.slice(STATE_MARKER.length, listEnd)) as readonly Todo[],
+    request: content.slice(content.indexOf(REQUEST_MARKER) + REQUEST_MARKER.length).trim(),
+    attempt: messages.slice(index).filter((m) => m.role === 'assistant').length,
   };
 }
 
@@ -100,26 +114,23 @@ const sleep = (ms: number, signal?: AbortSignal) =>
   });
 
 /**
- * A stand-in for machines without WebGPU. It replays scripted responses for
+ * A stand-in model for scripted mode (for example, without WebGPU). It replays scripted responses for
  * the suggested prompts, streamed at a readable pace, through the same
  * validation loop as the real model.
  */
-export function createScriptedModel(charsPerTick = 24, tickMs = 16): ModelClient {
+export function createScriptedModel(charsPerTick = 6, tickMs = 16): ModelClient {
   return {
-    label: 'Scripted (no WebGPU)',
     async generate({ messages, onText, signal }: GenerateRequest): Promise<string> {
-      const { current, request } = parseFirstUserMessage(messages);
+      const { todos, request, attempt } = parseTurn(messages);
       const prompt = SUGGESTED_PROMPTS.find((p) => p.text === request);
-      if (prompt === undefined) {
-        throw new Error(
-          'Scripted mode only supports the suggested prompts. Load a model to ask anything.',
-        );
-      }
-      const attempt = messages.filter((m) => m.role === 'assistant').length;
-      const responder = prompt.script[Math.min(attempt, prompt.script.length - 1)];
-      if (responder === undefined) throw new Error('Scripted model: empty script');
+      const responder = prompt?.script[Math.min(attempt, prompt.script.length - 1)];
+      const response: AssistantReply = responder?.(todos) ?? {
+        reply: 'Scripted mode only knows the suggested prompts. Load a model to ask me anything.',
+        calls: [],
+      };
 
-      const text = JSON.stringify(responder(current, attempt), null, 2);
+      // Same key order the real model is constrained to: calls, then reply.
+      const text = JSON.stringify({ calls: response.calls, reply: response.reply }, null, 2);
       for (let i = charsPerTick; i < text.length + charsPerTick; i += charsPerTick) {
         await sleep(tickMs, signal);
         onText?.(text.slice(0, i));

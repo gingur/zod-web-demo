@@ -1,8 +1,8 @@
 @import 'tailwindcss';
+/* The official TodoMVC look. In the base layer so Tailwind utilities still win on the chat side. */
+@import 'todomvc-app-css/index.css' layer(base);
 
 @theme {
-  --color-background: #fafafa;
-  --color-foreground: #18181b;
   --color-card: #ffffff;
   --color-muted: #f4f4f5;
   --color-muted-foreground: #71717a;
@@ -19,8 +19,24 @@
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
-body {
-  @apply bg-background text-foreground font-sans antialiased;
+@layer base {
+  /* todomvc-app-css narrows <body> to 550px; the page holds the list and the chat side by side. */
+  body {
+    max-width: none;
+    margin: 0;
+  }
+  /* Its h1 is positioned 140px above the card; leave room for it. */
+  .todoapp {
+    margin: 170px 0 24px;
+  }
+  /*
+   * Tailwind's preflight makes everything border-box; todomvc-app-css was
+   * written for content-box (a 20px footer plus 10px padding). Zero
+   * specificity, so its own explicit border-box rules still win.
+   */
+  :where(.todoapp, .todoapp *, .todoapp *::before, .todoapp *::after) {
+    box-sizing: content-box;
+  }
 }
 
 @keyframes flash {

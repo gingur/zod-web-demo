@@ -1,22 +1,16 @@
 import { z } from 'zod';
 
-/** The subset of JSON Schema that the form generator and decoder use. */
+/** The subset of JSON Schema the decoder uses. */
 export interface JsonSchemaNode {
   type?: string;
-  title?: string;
-  description?: string;
-  placeholder?: string;
-  format?: string;
-  pattern?: string;
-  enum?: readonly string[];
-  minimum?: number;
-  maximum?: number;
-  minItems?: number;
-  maxItems?: number;
+  const?: string | number | boolean;
+  enum?: readonly (string | number | boolean)[];
   items?: JsonSchemaNode;
   properties?: Record<string, JsonSchemaNode>;
   required?: readonly string[];
   additionalProperties?: boolean;
+  oneOf?: readonly JsonSchemaNode[];
+  anyOf?: readonly JsonSchemaNode[];
 }
 
 export function toJsonSchema(schema: z.ZodType): JsonSchemaNode {
@@ -30,30 +24,47 @@ const DECODER_KEYWORDS = new Set([
   'required',
   'items',
   'enum',
+  'const',
+  'anyOf',
+  'oneOf',
   'additionalProperties',
 ]);
 
 /**
  * Reduces a JSON Schema to the structural subset used to constrain decoding:
- * types, nesting, required keys and enums. Ranges, regex patterns, formats
- * and cross-field rules are left to Zod, so the grammar stays small and
- * nothing depends on the decoder's support for those keywords.
+ * types, nesting, required keys, enums and which tool shape is allowed.
+ * Lengths, counts and every rule that depends on the current todos (such as
+ * "that id exists") are left to Zod and the tools, so the grammar stays small.
+ *
+ * Zod writes a discriminated union as `oneOf` with `const` tags; they become
+ * `anyOf` and single-value `enum`, the forms the decoder was verified with.
+ * The tags already make the branches exclusive, so nothing is lost.
  */
 export function toDecoderSchema(node: JsonSchemaNode): JsonSchemaNode {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(node)) {
-    if (!DECODER_KEYWORDS.has(key)) continue;
-    if (key === 'properties' && value !== undefined) {
-      out[key] = Object.fromEntries(
-        Object.entries(value as Record<string, JsonSchemaNode>).map(([k, child]) => [
-          k,
-          toDecoderSchema(child),
-        ]),
-      );
-    } else if (key === 'items' && value !== undefined) {
-      out[key] = toDecoderSchema(value as JsonSchemaNode);
-    } else {
-      out[key] = value;
+    if (!DECODER_KEYWORDS.has(key) || value === undefined) continue;
+    switch (key) {
+      case 'properties':
+        out[key] = Object.fromEntries(
+          Object.entries(value as Record<string, JsonSchemaNode>).map(([k, child]) => [
+            k,
+            toDecoderSchema(child),
+          ]),
+        );
+        break;
+      case 'items':
+        out[key] = toDecoderSchema(value as JsonSchemaNode);
+        break;
+      case 'oneOf':
+      case 'anyOf':
+        out['anyOf'] = (value as JsonSchemaNode[]).map(toDecoderSchema);
+        break;
+      case 'const':
+        out['enum'] = [value];
+        break;
+      default:
+        out[key] = value;
     }
   }
   return out as JsonSchemaNode;

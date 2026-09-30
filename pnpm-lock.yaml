@@ -23,13 +23,16 @@ importers:
       tailwind-merge:
         specifier: ^3.7.0
         version: 3.7.0
+      todomvc-app-css:
+        specifier: 2.4.3
+        version: 2.4.3
       zod:
         specifier: ^4.6.5
         version: 4.6.5
     devDependencies:
       '@gingur/devkit':
         specifier: github:gingur/devkit#main
-        version: https://codeload.github.com/gingur/devkit/tar.gz/9e1058bd87caf1e404ccc27dcbc1c74000f6534b(typescript@7.0.2)
+        version: https://codeload.github.com/gingur/devkit/tar.gz/87eabe7537d98bf435276a701e97d7757c7bbd13(typescript@7.0.2)
       '@storybook/addon-docs':
         specifier: ^10.6.1
         version: 10.6.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(storybook@10.6.1(@types/react@19.3.0)(react@19.3.0))
@@ -329,8 +332,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@gingur/devkit@https://codeload.github.com/gingur/devkit/tar.gz/9e1058bd87caf1e404ccc27dcbc1c74000f6534b':
-    resolution: {tarball: https://codeload.github.com/gingur/devkit/tar.gz/9e1058bd87caf1e404ccc27dcbc1c74000f6534b}
+  '@gingur/devkit@https://codeload.github.com/gingur/devkit/tar.gz/87eabe7537d98bf435276a701e97d7757c7bbd13':
+    resolution: {tarball: https://codeload.github.com/gingur/devkit/tar.gz/87eabe7537d98bf435276a701e97d7757c7bbd13}
     version: 0.0.0
     engines: {node: '>=22.15'}
     hasBin: true
@@ -2302,6 +2305,10 @@ packages:
     resolution: {integrity: sha512-u8KszXvGfU68hVcZpRHKG28T0krMuv2G5nDhiHaMLen/gIuFEgIJhaJuO69qjnXg5paSrbPMFfx3brNuN8eVSg==}
     engines: {node: '>=14.0.0'}
 
+  todomvc-app-css@2.4.3:
+    resolution: {integrity: sha512-mSnWZaKBWj9aQcFRsGguY/a8O8NR8GmecD48yU1rzwNemgZa/INLpIsxxMiToFGVth+uEKBrQ7IhWkaXZxwq5Q==}
+    engines: {node: '>=4'}
+
   totalist@3.0.1:
     resolution: {integrity: sha512-sf4i37nQ2LBx4m3wB74y+ubopq6W/dIzXg0FDGjsYnZHVa1Da8FH853wlL2gtUhg+xJXjfk3kUZS3BRoQeoQBQ==}
     engines: {node: '>=6'}
@@ -2681,7 +2688,7 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@gingur/devkit@https://codeload.github.com/gingur/devkit/tar.gz/9e1058bd87caf1e404ccc27dcbc1c74000f6534b(typescript@7.0.2)':
+  '@gingur/devkit@https://codeload.github.com/gingur/devkit/tar.gz/87eabe7537d98bf435276a701e97d7757c7bbd13(typescript@7.0.2)':
     dependencies:
       commander: 15.0.0
       lint-staged: 16.4.0
@@ -4228,6 +4235,8 @@ snapshots:
   tinyrainbow@3.1.1: {}
 
   tinyspy@4.0.6: {}
+
+  todomvc-app-css@2.4.3: {}
 
   totalist@3.0.1: {}
 

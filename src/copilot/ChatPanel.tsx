@@ -1,24 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { Badge, Button, Card, NativeSelect, Progress, Textarea } from '@/components/ui';
-import { cn } from '@/lib/utils';
-import type { Change } from '@/copilot/diff';
+import type { Call } from '@/todo/schema';
 import { MODEL_OPTIONS, type LoadProgress } from '@/copilot/webllm';
+import { ASSISTANT_NAME } from '@/copilot/prompt';
 
-export interface AttemptView {
-  n: number;
-  text: string;
-  errors: string[] | undefined;
-}
-
-export type TurnStatus = 'running' | 'applied' | 'unchanged' | 'failed' | 'aborted' | 'error';
+type TurnStatus = 'running' | 'done' | 'failed' | 'aborted' | 'error';
 
 export interface Turn {
   id: number;
   request: string;
   status: TurnStatus;
-  attempts: AttemptView[];
-  changes: Change[];
-  message: string | undefined;
+  /** The assistant's text: streamed while running, then final. */
+  reply: string;
+  /** The calls that were applied. */
+  calls: readonly Call[];
+  /** Attempts that failed validation and were sent back to the model. */
+  rejected: readonly { attempt: number; errors: readonly string[] }[];
 }
 
 export type EngineState =
@@ -41,95 +38,39 @@ interface ChatPanelProps {
   onStop: () => void;
 }
 
-const fmt = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v));
-
-function ChangeList({ changes }: { changes: readonly Change[] }) {
+function CallLine({ call }: { call: Call }) {
   return (
-    <ul className="grid gap-1 font-mono text-xs">
-      {changes.map((c) => (
-        <li key={c.path} className="grid grid-cols-[auto_1fr] gap-x-2">
-          <span className="text-muted-foreground">{c.path}</span>
-          <span>
-            <span className="text-destructive line-through decoration-destructive/40">
-              {fmt(c.before)}
-            </span>
-            <span className="text-muted-foreground"> → </span>
-            <span className="text-accent">{fmt(c.after)}</span>
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function AttemptBlock({ attempt, live }: { attempt: AttemptView; live: boolean }) {
-  const ref = useRef<HTMLPreElement>(null);
-  useEffect(() => {
-    if (live && ref.current !== null) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [attempt.text, live]);
-  return (
-    <div className="grid gap-2">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">Attempt {attempt.n}</span>
-        {live && <span className="animate-pulse">generating under the schema…</span>}
-      </div>
-      <pre
-        ref={ref}
-        className="max-h-28 overflow-auto rounded-md bg-muted p-2 font-mono text-[11px] leading-snug text-muted-foreground"
-      >
-        {attempt.text || ' '}
-      </pre>
-      {attempt.errors !== undefined && (
-        <div className="rounded-md bg-destructive-soft p-2 text-xs text-destructive">
-          <p className="mb-1 font-semibold">Rejected by Zod, sent back to the model:</p>
-          <ul className="list-disc pl-4">
-            {attempt.errors.map((e) => (
-              <li key={e}>{e}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
+    <li className="font-mono text-[11px] text-muted-foreground">
+      <span className="text-accent">✓ {call.tool}</span> {JSON.stringify(call.args)}
+    </li>
   );
 }
 
 function TurnView({ turn }: { turn: Turn }) {
-  const statusBadge: Record<
-    TurnStatus,
-    { label: string; variant: 'success' | 'destructive' | 'outline' | 'warning' }
-  > = {
-    running: { label: 'Working', variant: 'outline' },
-    applied: {
-      label: `Applied after ${turn.attempts.length} ${turn.attempts.length === 1 ? 'attempt' : 'attempts'}`,
-      variant: 'success',
-    },
-    unchanged: { label: 'No changes', variant: 'warning' },
-    failed: { label: 'Not applied', variant: 'destructive' },
-    aborted: { label: 'Stopped', variant: 'outline' },
-    error: { label: 'Error', variant: 'destructive' },
-  };
-  const badge = statusBadge[turn.status];
   return (
     <div className="grid gap-2">
       <div className="ml-8 justify-self-end rounded-lg rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
         {turn.request}
       </div>
-      <div className="mr-4 grid gap-3 rounded-lg rounded-bl-sm border border-border bg-card p-3">
-        {turn.attempts.map((a) => (
-          <AttemptBlock
-            key={a.n}
-            attempt={a}
-            live={
-              turn.status === 'running' && a.n === turn.attempts.length && a.errors === undefined
-            }
-          />
+      <div className="mr-8 grid gap-2 rounded-lg rounded-bl-sm border border-border bg-card px-3 py-2 text-sm">
+        <p className={turn.status === 'error' ? 'text-destructive' : undefined}>
+          {turn.reply ||
+            (turn.status === 'running' ? <span className="animate-pulse">…</span> : '')}
+        </p>
+        {turn.rejected.map((r) => (
+          <div
+            key={r.attempt}
+            className="rounded-md bg-destructive-soft px-2 py-1 text-xs text-destructive"
+          >
+            Attempt {r.attempt} rejected by Zod, sent back to the model: {r.errors.join('; ')}
+          </div>
         ))}
-        <div className="flex items-center gap-2">
-          <Badge variant={badge.variant}>{badge.label}</Badge>
-        </div>
-        {turn.status === 'applied' && <ChangeList changes={turn.changes} />}
-        {turn.message !== undefined && (
-          <p className="text-xs text-muted-foreground">{turn.message}</p>
+        {turn.calls.length > 0 && (
+          <ul className="grid gap-0.5">
+            {turn.calls.map((call, i) => (
+              <CallLine key={i} call={call} />
+            ))}
+          </ul>
         )}
       </div>
     </div>
@@ -159,10 +100,10 @@ export function ChatPanel(props: ChatPanelProps) {
       <div className="grid gap-3 border-b border-border p-4">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h2 className="text-base font-semibold">Copilot</h2>
+            <h2 className="text-base font-semibold">{ASSISTANT_NAME}</h2>
             <p className="text-xs text-muted-foreground">
-              Runs entirely in your browser. Output is constrained by the schema, then validated by
-              Zod.
+              Runs in your browser. It can do anything the todo list can, and Zod checks every
+              change first.
             </p>
           </div>
           {ready && <Badge variant={engine.scripted ? 'warning' : 'success'}>{engine.label}</Badge>}
@@ -173,6 +114,7 @@ export function ChatPanel(props: ChatPanelProps) {
             {props.webgpu ? (
               <div className="flex gap-2">
                 <NativeSelect
+                  aria-label="Model"
                   value={props.modelId}
                   onChange={(e) => props.onModelIdChange(e.target.value)}
                   disabled={engine.kind === 'loading'}
@@ -207,7 +149,9 @@ export function ChatPanel(props: ChatPanelProps) {
             )}
             <button
               type="button"
-              className="justify-self-start text-xs text-muted-foreground underline"
+              className="justify-self-start text-xs text-muted-foreground underline disabled:opacity-50"
+              // A load in flight can't be cancelled, and would overwrite this choice when it lands.
+              disabled={engine.kind === 'loading'}
               onClick={props.onUseScripted}
             >
               Use scripted mode instead
@@ -219,8 +163,7 @@ export function ChatPanel(props: ChatPanelProps) {
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
         {turns.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Ask for a change in plain language. The model returns a full config, Zod checks it, and
-            only a valid result reaches the form.
+            Hi, I'm {ASSISTANT_NAME}. Ask me to add, edit, complete, delete or filter your todos.
           </p>
         ) : (
           <div className="grid gap-5">
@@ -247,8 +190,9 @@ export function ChatPanel(props: ChatPanelProps) {
         </div>
         <div className="flex items-end gap-2">
           <Textarea
+            aria-label="Message"
             value={input}
-            placeholder={ready ? 'Describe a change…' : 'Load a model first'}
+            placeholder={ready ? 'Ask for a change…' : 'Load a model first'}
             disabled={!ready}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -263,11 +207,7 @@ export function ChatPanel(props: ChatPanelProps) {
               Stop
             </Button>
           ) : (
-            <Button
-              className={cn(!ready && 'opacity-50')}
-              disabled={!ready || input.trim() === ''}
-              onClick={() => send(input)}
-            >
+            <Button disabled={!ready || input.trim() === ''} onClick={() => send(input)}>
               Send
             </Button>
           )}

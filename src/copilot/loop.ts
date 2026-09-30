@@ -1,6 +1,8 @@
 import type { z } from 'zod';
-import type { JsonSchemaNode } from '@/schema/jsonSchema';
-import { diff, type Change } from './diff';
+import { toDecoderSchema, toJsonSchema, type JsonSchemaNode } from '@/schema/jsonSchema';
+import { replySchema, type Call, type TodoState } from '@/todo/schema';
+import { applyCalls } from '@/todo/tools';
+import { buildMessages } from './prompt';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -17,63 +19,31 @@ export interface GenerateRequest {
 }
 
 export interface ModelClient {
-  readonly label: string;
   generate(request: GenerateRequest): Promise<string>;
 }
 
-export type CopilotEvent<T> =
+/** The structural subset of `replySchema` that constrains decoding. */
+export const decoderSchema = toDecoderSchema(toJsonSchema(replySchema));
+
+export type AssistantEvent =
   | { kind: 'attempt'; attempt: number }
   | { kind: 'text'; attempt: number; text: string }
-  | { kind: 'rejected'; attempt: number; errors: string[] }
-  | { kind: 'applied'; attempt: number; config: T; changes: Change[] };
+  | { kind: 'rejected'; attempt: number; errors: string[] };
 
-export type CopilotResult<T> =
-  | { status: 'applied'; config: T; changes: Change[]; attempts: number }
-  | { status: 'unchanged'; attempts: number }
+type AssistantResult =
+  | { status: 'done'; reply: string; calls: readonly Call[]; state: TodoState; attempts: number }
   | { status: 'failed'; errors: string[]; attempts: number }
   | { status: 'aborted'; attempts: number };
 
-export interface RunCopilotOptions<T> {
-  schema: z.ZodType<T>;
-  /** Full JSON Schema, shown to the model in the prompt. */
-  promptSchema: JsonSchemaNode;
-  /** Structural subset, used to constrain decoding. */
-  decoderSchema: JsonSchemaNode;
-  crossFieldRules: readonly string[];
-  current: T;
+export interface RunAssistantOptions {
+  state: TodoState;
+  /** Earlier requests and accepted replies; trimmed to the last few by the prompt builder. */
+  history: readonly ChatMessage[];
   request: string;
   model: ModelClient;
-  today: string;
   maxAttempts?: number;
   signal?: AbortSignal;
-  onEvent?: (event: CopilotEvent<T>) => void;
-}
-
-export function buildMessages(options: {
-  promptSchema: JsonSchemaNode;
-  crossFieldRules: readonly string[];
-  current: unknown;
-  request: string;
-  today: string;
-}): ChatMessage[] {
-  const system = [
-    'You edit a JSON configuration for a marketing popup campaign.',
-    'Return the COMPLETE updated configuration as a single JSON object that matches the schema.',
-    'Change only what the request asks for; copy every other value exactly as it is.',
-    `Today's date is ${options.today}. Dates use YYYY-MM-DD.`,
-    '',
-    "Rules the schema can't express, which must also hold:",
-    ...options.crossFieldRules.map((r) => `- ${r}`),
-    '',
-    'JSON Schema:',
-    JSON.stringify(options.promptSchema),
-  ].join('\n');
-
-  const user = `Current configuration:\n${JSON.stringify(options.current, null, 2)}\n\nRequest: ${options.request}`;
-  return [
-    { role: 'system', content: system },
-    { role: 'user', content: user },
-  ];
+  onEvent?: (event: AssistantEvent) => void;
 }
 
 function isAbort(error: unknown, signal: AbortSignal | undefined): boolean {
@@ -87,20 +57,21 @@ function formatIssues(issues: readonly z.core.$ZodIssue[]): string[] {
 }
 
 /**
- * One request from the chat panel. The model proposes a full config under a
- * constrained decoder; Zod then checks everything the decoder can't (ranges,
- * patterns, cross-field rules). Failures are sent back to the model until it
- * passes or the attempt budget runs out. Nothing reaches the form unless the
- * whole config is valid.
+ * One chat turn. The model answers under a constrained decoder with a reply
+ * and a list of tool calls. Zod checks the shape, then the calls are applied
+ * to a copy of the list, all or nothing, which catches what the decoder can't
+ * (an id that doesn't exist, an empty title). Failures go back to the model
+ * until it passes or the attempt budget runs out. Nothing changes the real
+ * list unless the whole turn is valid; the caller commits `state`.
  */
-export async function runCopilot<T>(options: RunCopilotOptions<T>): Promise<CopilotResult<T>> {
-  const { schema, current, model, signal, onEvent } = options;
+export async function runAssistant(options: RunAssistantOptions): Promise<AssistantResult> {
+  const { state, model, signal, onEvent } = options;
   const maxAttempts = options.maxAttempts ?? 3;
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
     throw new RangeError(`maxAttempts must be a positive integer, got ${maxAttempts}`);
   }
 
-  const messages = buildMessages(options);
+  const messages = buildMessages(state, options.history, options.request);
   let lastErrors: string[] = [];
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -111,9 +82,9 @@ export async function runCopilot<T>(options: RunCopilotOptions<T>): Promise<Copi
     try {
       text = await model.generate({
         messages,
-        decoderSchema: options.decoderSchema,
+        decoderSchema,
         onText: (t) => onEvent?.({ kind: 'text', attempt, text: t }),
-        ...(signal !== undefined ? { signal } : {}),
+        signal,
       });
     } catch (error: unknown) {
       if (isAbort(error, signal)) return { status: 'aborted', attempts: attempt };
@@ -125,19 +96,21 @@ export async function runCopilot<T>(options: RunCopilotOptions<T>): Promise<Copi
     try {
       parsed = JSON.parse(text);
     } catch {
-      parsed = undefined;
       lastErrors = ['(root): the response was not valid JSON; it may have been cut off'];
     }
 
     if (parsed !== undefined) {
-      const result = schema.safeParse(parsed);
-      if (result.success) {
-        const changes = diff(current, result.data);
-        if (changes.length === 0) return { status: 'unchanged', attempts: attempt };
-        onEvent?.({ kind: 'applied', attempt, config: result.data, changes });
-        return { status: 'applied', config: result.data, changes, attempts: attempt };
+      const shape = replySchema.safeParse(parsed);
+      if (shape.success) {
+        const { calls, reply } = shape.data;
+        const applied = applyCalls(state, calls);
+        if (applied.ok) {
+          return { status: 'done', reply, calls, state: applied.state, attempts: attempt };
+        }
+        lastErrors = applied.errors;
+      } else {
+        lastErrors = formatIssues(shape.error.issues);
       }
-      lastErrors = formatIssues(result.error.issues);
     }
 
     onEvent?.({ kind: 'rejected', attempt, errors: lastErrors });
@@ -146,9 +119,9 @@ export async function runCopilot<T>(options: RunCopilotOptions<T>): Promise<Copi
       {
         role: 'user',
         content:
-          'That configuration failed validation:\n' +
+          'That answer failed validation, so nothing was changed:\n' +
           lastErrors.map((e) => `- ${e}`).join('\n') +
-          '\nFix these problems and return the complete corrected configuration.',
+          '\nFix these problems and answer again with the complete reply and calls.',
       },
     );
   }

@@ -14,21 +14,21 @@ export function applyCall(state: TodoState, input: Call): CallResult {
     return { ok: false, error: parsed.error.issues.map((i) => i.message).join('; ') };
   }
   const call = parsed.data;
-  if ('id' in call.args) {
-    const { id } = call.args;
+  if ('id' in call.arguments) {
+    const { id } = call.arguments;
     if (!state.todos.some((t) => t.id === id)) {
       return {
         ok: false,
-        error: `There is no todo with id "${id}". Copy the id from the current list.`,
+        error: `There is no todo with id "${id}". Copy the id from the todo context.`,
       };
     }
   }
   const withTodos = (todos: readonly Todo[]): CallResult => ({
     ok: true,
-    state: { ...state, todos },
+    state: { ...state, todos: [...todos] },
   });
 
-  switch (call.tool) {
+  switch (call.name) {
     case 'add_todo':
       return {
         ok: true,
@@ -36,31 +36,29 @@ export function applyCall(state: TodoState, input: Call): CallResult {
           ...state,
           todos: [
             ...state.todos,
-            { id: `t${state.nextId}`, title: call.args.title, completed: false },
+            { id: `t${state.nextId}`, title: call.arguments.title, completed: false },
           ],
           nextId: state.nextId + 1,
         },
       };
     case 'edit_todo': {
-      const { id, title } = call.args;
-      return withTodos(
-        title === ''
-          ? state.todos.filter((t) => t.id !== id)
-          : state.todos.map((t) => (t.id === id ? { ...t, title } : t)),
-      );
+      const { id, title } = call.arguments;
+      return withTodos(state.todos.map((t) => (t.id === id ? { ...t, title } : t)));
     }
     case 'toggle_todo':
       return withTodos(
-        state.todos.map((t) => (t.id === call.args.id ? { ...t, completed: !t.completed } : t)),
+        state.todos.map((t) =>
+          t.id === call.arguments.id ? { ...t, completed: !t.completed } : t,
+        ),
       );
     case 'toggle_all':
-      return withTodos(state.todos.map((t) => ({ ...t, completed: call.args.completed })));
+      return withTodos(state.todos.map((t) => ({ ...t, completed: call.arguments.completed })));
     case 'delete_todo':
-      return withTodos(state.todos.filter((t) => t.id !== call.args.id));
+      return withTodos(state.todos.filter((t) => t.id !== call.arguments.id));
     case 'clear_completed':
       return withTodos(state.todos.filter((t) => !t.completed));
     case 'set_filter':
-      return { ok: true, state: { ...state, filter: call.args.filter } };
+      return { ok: true, state: { ...state, filter: call.arguments.filter } };
   }
 }
 
@@ -69,7 +67,7 @@ export function applyCalls(state: TodoState, calls: readonly Call[]): BatchResul
   let next = state;
   for (const [i, call] of calls.entries()) {
     const result = applyCall(next, call);
-    if (!result.ok) return { ok: false, errors: [`calls.${i} (${call.tool}): ${result.error}`] };
+    if (!result.ok) return { ok: false, errors: [`calls.${i} (${call.name}): ${result.error}`] };
     next = result.state;
   }
   return { ok: true, state: next };

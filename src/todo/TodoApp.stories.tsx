@@ -56,6 +56,12 @@ export const AddEditToggleDelete: Story = {
 
     await userEvent.click(canvas.getByLabelText('Delete Buy milk'));
     await expect(titles(canvas)).toEqual(['Walk the dog', 'Call dad', 'Eggs']);
+
+    // As in TodoMVC, clearing a todo's text in the editor deletes it.
+    await userEvent.dblClick(canvas.getByText('Eggs'));
+    await userEvent.clear(canvas.getByLabelText('Edit Eggs'));
+    await userEvent.keyboard('{Enter}');
+    await expect(titles(canvas)).toEqual(['Walk the dog', 'Call dad']);
   },
 };
 

@@ -13,53 +13,57 @@ function ok(state: TodoState, call: Call): TodoState {
 
 describe('applyCall', () => {
   test('add_todo appends an active todo with the next id and a trimmed title', () => {
-    const next = ok(initialState, { tool: 'add_todo', args: { title: '  Eggs  ' } });
+    const next = ok(initialState, { name: 'add_todo', arguments: { title: '  Eggs  ' } });
     expect(next.todos.at(-1)).toEqual({ id: 't4', title: 'Eggs', completed: false });
     expect(next.nextId).toBe(5);
   });
 
   test('add_todo refuses an empty title', () => {
-    expect(applyCall(initialState, { tool: 'add_todo', args: { title: '   ' } })).toEqual({
+    expect(applyCall(initialState, { name: 'add_todo', arguments: { title: '   ' } })).toEqual({
       ok: false,
       error: "A new todo's title can't be empty",
     });
   });
 
-  test('edit_todo renames, and an empty title deletes, as in TodoMVC', () => {
+  test('edit_todo renames, and refuses an empty title: deleting is always explicit', () => {
     const renamed = ok(initialState, {
-      tool: 'edit_todo',
-      args: { id: 't3', title: ' Call dad ' },
+      name: 'edit_todo',
+      arguments: { id: 't3', title: ' Call dad ' },
     });
     expect(renamed.todos.find((t) => t.id === 't3')?.title).toBe('Call dad');
-    const deleted = ok(initialState, { tool: 'edit_todo', args: { id: 't3', title: '' } });
-    expect(titles(deleted)).toEqual(['t1:Buy milk: ', 't2:Walk the dog:x']);
+    expect(
+      applyCall(initialState, { name: 'edit_todo', arguments: { id: 't3', title: '  ' } }),
+    ).toEqual({
+      ok: false,
+      error: 'A title cannot be empty; to remove a todo, use delete_todo.',
+    });
   });
 
   test('toggle_todo flips one todo', () => {
-    const next = ok(initialState, { tool: 'toggle_todo', args: { id: 't1' } });
+    const next = ok(initialState, { name: 'toggle_todo', arguments: { id: 't1' } });
     expect(next.todos[0]?.completed).toBe(true);
   });
 
   test('toggle_all sets every todo', () => {
-    const done = ok(initialState, { tool: 'toggle_all', args: { completed: true } });
+    const done = ok(initialState, { name: 'toggle_all', arguments: { completed: true } });
     expect(done.todos.every((t) => t.completed)).toBe(true);
-    const active = ok(done, { tool: 'toggle_all', args: { completed: false } });
+    const active = ok(done, { name: 'toggle_all', arguments: { completed: false } });
     expect(active.todos.some((t) => t.completed)).toBe(false);
   });
 
   test('delete_todo and clear_completed remove todos', () => {
-    expect(titles(ok(initialState, { tool: 'delete_todo', args: { id: 't1' } }))).toEqual([
+    expect(titles(ok(initialState, { name: 'delete_todo', arguments: { id: 't1' } }))).toEqual([
       't2:Walk the dog:x',
       't3:Call mom: ',
     ]);
-    expect(titles(ok(initialState, { tool: 'clear_completed', args: {} }))).toEqual([
+    expect(titles(ok(initialState, { name: 'clear_completed', arguments: {} }))).toEqual([
       't1:Buy milk: ',
       't3:Call mom: ',
     ]);
   });
 
   test('set_filter changes the view, not the todos', () => {
-    const next = ok(initialState, { tool: 'set_filter', args: { filter: 'active' } });
+    const next = ok(initialState, { name: 'set_filter', arguments: { filter: 'active' } });
     expect(next.filter).toBe('active');
     expect(next.todos).toBe(initialState.todos);
     expect(visible(next).map((t) => t.id)).toEqual(['t1', 't3']);
@@ -67,18 +71,18 @@ describe('applyCall', () => {
 
   test('an unknown id is refused and tells the model to copy an id from the list', () => {
     for (const tool of ['toggle_todo', 'delete_todo'] as const) {
-      const result = applyCall(initialState, { tool, args: { id: 't9' } });
+      const result = applyCall(initialState, { name: tool, arguments: { id: 't9' } });
       expect(result).toEqual({
         ok: false,
-        error: 'There is no todo with id "t9". Copy the id from the current list.',
+        error: 'There is no todo with id "t9". Copy the id from the todo context.',
       });
     }
   });
 
   test('a malformed call is refused by the schema, not trusted', () => {
     const result = applyCall(initialState, {
-      tool: 'set_filter',
-      args: { filter: 'done' },
+      name: 'set_filter',
+      arguments: { filter: 'done' },
     } as never);
     expect(result.ok).toBe(false);
   });
@@ -87,21 +91,21 @@ describe('applyCall', () => {
 describe('applyCalls', () => {
   test('applies a batch in order', () => {
     const result = applyCalls(initialState, [
-      { tool: 'add_todo', args: { title: 'Eggs' } },
-      { tool: 'toggle_todo', args: { id: 't4' } },
+      { name: 'add_todo', arguments: { title: 'Eggs' } },
+      { name: 'toggle_todo', arguments: { id: 't4' } },
     ]);
     expect(result.ok && titles(result.state).at(-1)).toBe('t4:Eggs:x');
   });
 
   test('is all or nothing, and reports which call failed', () => {
     const result = applyCalls(initialState, [
-      { tool: 'delete_todo', args: { id: 't1' } },
-      { tool: 'toggle_todo', args: { id: 't1' } },
+      { name: 'delete_todo', arguments: { id: 't1' } },
+      { name: 'toggle_todo', arguments: { id: 't1' } },
     ]);
     expect(result).toEqual({
       ok: false,
       errors: [
-        'calls.1 (toggle_todo): There is no todo with id "t1". Copy the id from the current list.',
+        'calls.1 (toggle_todo): There is no todo with id "t1". Copy the id from the todo context.',
       ],
     });
   });

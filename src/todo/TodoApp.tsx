@@ -23,7 +23,12 @@ export function TodoApp({ state, dispatch, highlight, disabled = false }: TodoAp
 
   const commitEdit = () => {
     if (editing === null) return;
-    dispatch({ tool: 'edit_todo', args: editing });
+    // As in TodoMVC, clearing the text deletes the todo.
+    dispatch(
+      editing.title.trim() === ''
+        ? { name: 'delete_todo', arguments: { id: editing.id } }
+        : { name: 'edit_todo', arguments: editing },
+    );
     setEditing(null);
   };
 
@@ -40,7 +45,7 @@ export function TodoApp({ state, dispatch, highlight, disabled = false }: TodoAp
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => {
             if (e.key !== 'Enter' || newTitle.trim() === '') return;
-            dispatch({ tool: 'add_todo', args: { title: newTitle } });
+            dispatch({ name: 'add_todo', arguments: { title: newTitle } });
             setNewTitle('');
           }}
         />
@@ -54,7 +59,7 @@ export function TodoApp({ state, dispatch, highlight, disabled = false }: TodoAp
             type="checkbox"
             checked={left === 0}
             disabled={disabled}
-            onChange={() => dispatch({ tool: 'toggle_all', args: { completed: left > 0 } })}
+            onChange={() => dispatch({ name: 'toggle_all', arguments: { completed: left > 0 } })}
           />
           <label htmlFor="toggle-all">Mark all as complete</label>
           <ul className="todo-list">
@@ -74,7 +79,7 @@ export function TodoApp({ state, dispatch, highlight, disabled = false }: TodoAp
                       aria-label={`Toggle ${todo.title}`}
                       checked={todo.completed}
                       disabled={disabled}
-                      onChange={() => dispatch({ tool: 'toggle_todo', args: { id: todo.id } })}
+                      onChange={() => dispatch({ name: 'toggle_todo', arguments: { id: todo.id } })}
                     />
                     <label
                       onDoubleClick={() =>
@@ -87,7 +92,7 @@ export function TodoApp({ state, dispatch, highlight, disabled = false }: TodoAp
                       className="destroy"
                       aria-label={`Delete ${todo.title}`}
                       disabled={disabled}
-                      onClick={() => dispatch({ tool: 'delete_todo', args: { id: todo.id } })}
+                      onClick={() => dispatch({ name: 'delete_todo', arguments: { id: todo.id } })}
                     />
                   </div>
                   {isEditing && (
@@ -124,7 +129,7 @@ export function TodoApp({ state, dispatch, highlight, disabled = false }: TodoAp
                   className={state.filter === filter ? 'selected' : undefined}
                   onClick={(e) => {
                     e.preventDefault();
-                    if (!disabled) dispatch({ tool: 'set_filter', args: { filter } });
+                    if (!disabled) dispatch({ name: 'set_filter', arguments: { filter } });
                   }}
                 >
                   {FILTER_LABELS[filter]}
@@ -136,7 +141,7 @@ export function TodoApp({ state, dispatch, highlight, disabled = false }: TodoAp
             <button
               className="clear-completed"
               disabled={disabled}
-              onClick={() => dispatch({ tool: 'clear_completed', args: {} })}
+              onClick={() => dispatch({ name: 'clear_completed', arguments: {} })}
             >
               Clear completed
             </button>

@@ -19,7 +19,7 @@ export const Idle: Story = {};
 /**
  * The path the live demo takes, with the scripted model: the first attempt
  * guesses an id, the tool rejects it, the model corrects it, and only then
- * does the list change. The reply is text either way.
+ * does the list change. The reply is the facts of what happened, written by code.
  */
 export const RejectsThenApplies: Story = {
   play: async ({ canvasElement }) => {
@@ -32,7 +32,7 @@ export const RejectsThenApplies: Story = {
     ).toHaveTextContent('There is no todo with id "buy-milk"');
     await expect(
       await canvas.findByText(
-        "Added eggs and bread, and marked 'Buy milk' as done.",
+        "Added 'Eggs'. Added 'Bread'. Marked 'Buy milk' as done.",
         {},
         { timeout: 10_000 },
       ),
@@ -50,6 +50,24 @@ export const RefusesOffTopic: Story = {
     await userEvent.click(canvas.getByRole('button', { name: /poem about cats/ }));
     await expect(
       await canvas.findByText(/I can only help with your todo list/, {}, { timeout: 10_000 }),
+    ).toBeInTheDocument();
+    await expect(canvas.queryByText(/✓/)).toBeNull();
+    await expect(titles(canvas)).toEqual(['Buy milk', 'Walk the dog', 'Call mom']);
+  },
+};
+
+/** A question: nothing changes, and the model answers in its own words. */
+export const AnswersQuestion: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Use scripted mode instead' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'What can you do?' }));
+    await expect(
+      await canvas.findByText(
+        /I can add, rename, complete and delete todos/,
+        {},
+        { timeout: 10_000 },
+      ),
     ).toBeInTheDocument();
     await expect(canvas.queryByText(/✓/)).toBeNull();
     await expect(titles(canvas)).toEqual(['Buy milk', 'Walk the dog', 'Call mom']);

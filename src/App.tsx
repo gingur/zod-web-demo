@@ -3,8 +3,9 @@ import { initialState, type Call, type TodoState } from '@/todo/schema';
 import { applyCall } from '@/todo/tools';
 import { TodoApp } from '@/todo/TodoApp';
 import { ChatPanel, type EngineState, type Turn } from '@/copilot/ChatPanel';
-import { runAssistant, type ChatMessage, type ModelClient } from '@/copilot/loop';
-import { partialReply } from '@/copilot/prompt';
+import type { ModelClient } from '@/copilot/loop';
+import { runPipeline } from '@/copilot/pipeline';
+import type { PastTurn } from '@/copilot/prompt';
 import { createScriptedModel, SUGGESTED_PROMPTS } from '@/copilot/scripted';
 import { DEFAULT_MODEL_ID, MODEL_OPTIONS, hasWebGPU, loadWebLLM } from '@/copilot/webllm';
 
@@ -37,7 +38,7 @@ export function App() {
   const [engine, setEngine] = useState<EngineState>({ kind: 'idle' });
   const modelRef = useRef<(ModelClient & { unload?: () => Promise<void> }) | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
-  const historyRef = useRef<ChatMessage[]>([]);
+  const historyRef = useRef<PastTurn[]>([]);
   const [running, setRunning] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const nextTurnId = useRef(1);
@@ -97,16 +98,13 @@ export function App() {
     let reply: string;
     let applied: readonly Call[] = [];
     try {
-      const result = await runAssistant({
+      const result = await runPipeline({
         state: snapshot,
         history: historyRef.current,
         request,
         model,
         signal: controller.signal,
-        onEvent: (event) => {
-          if (event.kind === 'attempt') updateTurn(id, (t) => ({ ...t, reply: '' }));
-          if (event.kind === 'text')
-            updateTurn(id, (t) => ({ ...t, reply: partialReply(event.text) }));
+        onPlanEvent: (event) => {
           if (event.kind === 'rejected') {
             updateTurn(id, (t) => ({
               ...t,
@@ -114,11 +112,12 @@ export function App() {
             }));
           }
         },
+        onReplyText: (text) => updateTurn(id, (t) => ({ ...t, reply: text })),
       });
 
       switch (result.status) {
         case 'done':
-          if (todosRef.current !== snapshot) {
+          if (result.calls.length > 0 && todosRef.current !== snapshot) {
             // The list changed while the model worked; don't overwrite that edit.
             status = 'failed';
             reply =
@@ -128,8 +127,16 @@ export function App() {
           status = 'done';
           reply = result.reply;
           applied = result.calls;
-          commit(result.state);
-          setHighlight(touchedIds(snapshot, result.state));
+          if (result.calls.length > 0) {
+            commit(result.state);
+            setHighlight(touchedIds(snapshot, result.state));
+          }
+          // History records what actually happened, so a follow-up like "change that back"
+          // can see what a todo was called before.
+          historyRef.current = [
+            ...historyRef.current,
+            { request, intent: result.intent, calls: result.calls, changes: result.changes, reply },
+          ];
           break;
         case 'failed':
           status = 'failed';
@@ -148,13 +155,6 @@ export function App() {
       setRunning(false);
     }
     updateTurn(id, (t) => ({ ...t, status, reply, calls: applied }));
-    // History records what actually happened, in the same shape the model answers in,
-    // so a follow-up like "change that back" can see the calls it refers to.
-    historyRef.current = [
-      ...historyRef.current,
-      { role: 'user', content: request },
-      { role: 'assistant', content: JSON.stringify({ calls: applied, reply }) },
-    ];
   }
 
   function reset(): void {

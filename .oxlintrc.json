@@ -1,0 +1,5 @@
+{
+  "$schema": "./node_modules/@gingur/devkit/node_modules/oxlint/configuration_schema.json",
+  "extends": ["./node_modules/@gingur/devkit/configs/oxlintrc.base.json"],
+  "ignorePatterns": ["dist/**", "storybook-static/**"]
+}

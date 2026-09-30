@@ -1,0 +1,16 @@
+name: Verify
+
+# Required check for `main` (infra branch-protection context "verify / verify").
+# No path filter: a required check that doesn't run blocks the PR forever.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: gingur/devkit/.github/workflows/toolchain.verify.yml@main
+    with:
+      # Unit tests plus the Storybook stories in headless Chromium.
+      test: 'test:ci'

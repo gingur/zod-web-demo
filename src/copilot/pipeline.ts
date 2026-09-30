@@ -219,7 +219,8 @@ export function describeCalls(before: TodoState, calls: readonly Call[]): string
 function counts(state: TodoState): string {
   const group = (completed: boolean) => {
     const titles = state.todos.filter((t) => t.completed === completed).map((t) => `'${t.title}'`);
-    return `${titles.length} ${completed ? 'completed' : 'active'}${titles.length > 0 ? ` (${titles.join(', ')})` : ''}`;
+    const label = `${titles.length} ${completed ? 'completed' : 'active'}`;
+    return titles.length === 0 ? label : `${label} (${titles.join(', ')})`;
   };
   return `Counts: ${group(false)}; ${group(true)}; showing ${FILTER_WORDS[state.filter]}.`;
 }

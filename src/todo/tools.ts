@@ -23,10 +23,7 @@ export function applyCall(state: TodoState, input: Call): CallResult {
       };
     }
   }
-  const withTodos = (todos: readonly Todo[]): CallResult => ({
-    ok: true,
-    state: { ...state, todos: [...todos] },
-  });
+  const withTodos = (todos: Todo[]): CallResult => ({ ok: true, state: { ...state, todos } });
 
   switch (call.name) {
     case 'add_todo':

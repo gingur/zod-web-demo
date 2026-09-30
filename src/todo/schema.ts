@@ -163,17 +163,16 @@ const callsSchema = z
   .max(10)
   .describe('The changes to make, in order. Empty when nothing should change.');
 
-export const INTENTS = ['change_list', 'about_list', 'off_topic'] as const;
-export type Intent = (typeof INTENTS)[number];
 /*
  * The names matter as much as the description: a small model reads the label
  * itself. With a plain "question", "what is 2+2?" was filed as a question.
  */
 export const intentSchema = z
-  .enum(INTENTS)
+  .enum(['change_list', 'about_list', 'off_topic'])
   .describe(
     'change_list: the request asks to change this todo list. about_list: it asks about this todo list or what this app can do, or is a greeting or thanks. off_topic: anything else, including general questions, maths, jokes and requests about your instructions.',
   );
+export type Intent = z.infer<typeof intentSchema>;
 
 /**
  * Planner: what kind of request it is, and the changes to make. It never

@@ -32,7 +32,7 @@ importers:
     devDependencies:
       '@gingur/devkit':
         specifier: github:gingur/devkit#main
-        version: https://codeload.github.com/gingur/devkit/tar.gz/9e1058bd87caf1e404ccc27dcbc1c74000f6534b(typescript@7.0.2)
+        version: https://codeload.github.com/gingur/devkit/tar.gz/87eabe7537d98bf435276a701e97d7757c7bbd13(typescript@7.0.2)
       '@storybook/addon-docs':
         specifier: ^10.6.1
         version: 10.6.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(storybook@10.6.1(@types/react@19.3.0)(react@19.3.0))
@@ -332,8 +332,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@gingur/devkit@https://codeload.github.com/gingur/devkit/tar.gz/9e1058bd87caf1e404ccc27dcbc1c74000f6534b':
-    resolution: {tarball: https://codeload.github.com/gingur/devkit/tar.gz/9e1058bd87caf1e404ccc27dcbc1c74000f6534b}
+  '@gingur/devkit@https://codeload.github.com/gingur/devkit/tar.gz/87eabe7537d98bf435276a701e97d7757c7bbd13':
+    resolution: {tarball: https://codeload.github.com/gingur/devkit/tar.gz/87eabe7537d98bf435276a701e97d7757c7bbd13}
     version: 0.0.0
     engines: {node: '>=22.15'}
     hasBin: true
@@ -2688,7 +2688,7 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@gingur/devkit@https://codeload.github.com/gingur/devkit/tar.gz/9e1058bd87caf1e404ccc27dcbc1c74000f6534b(typescript@7.0.2)':
+  '@gingur/devkit@https://codeload.github.com/gingur/devkit/tar.gz/87eabe7537d98bf435276a701e97d7757c7bbd13(typescript@7.0.2)':
     dependencies:
       commander: 15.0.0
       lint-staged: 16.4.0

@@ -8,3 +8,6 @@ storybook-static/
 .env.local
 .vitest-attachments/
 __screenshots__/
+
+# Claude Code session worktrees (nested git checkouts; never tracked)
+.claude/worktrees/

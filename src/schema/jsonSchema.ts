@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** The subset of JSON Schema the decoder and the schema viewer use. */
+/** The subset of JSON Schema the decoder uses. */
 export interface JsonSchemaNode {
   type?: string;
   description?: string;

@@ -4,7 +4,7 @@ import type { Call } from '@/todo/schema';
 import { MODEL_OPTIONS, type LoadProgress } from '@/copilot/webllm';
 import { ASSISTANT_NAME } from '@/copilot/prompt';
 
-export type TurnStatus = 'running' | 'done' | 'failed' | 'aborted' | 'error';
+type TurnStatus = 'running' | 'done' | 'failed' | 'aborted' | 'error';
 
 export interface Turn {
   id: number;

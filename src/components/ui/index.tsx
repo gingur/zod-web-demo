@@ -7,37 +7,27 @@ import {
 } from 'react';
 import { cn } from '@/lib/utils';
 
-type ButtonVariant = 'default' | 'outline' | 'ghost' | 'accent' | 'destructive';
-type ButtonSize = 'default' | 'sm' | 'icon';
+type ButtonVariant = 'default' | 'outline' | 'accent';
 
 const buttonVariants: Record<ButtonVariant, string> = {
   default: 'bg-primary text-primary-foreground hover:bg-primary/90',
   outline: 'border border-border bg-card hover:bg-muted',
-  ghost: 'hover:bg-muted',
   accent: 'bg-accent text-white hover:bg-accent/90',
-  destructive: 'bg-destructive text-white hover:bg-destructive/90',
-};
-const buttonSizes: Record<ButtonSize, string> = {
-  default: 'h-9 px-4 text-sm',
-  sm: 'h-8 px-3 text-xs',
-  icon: 'h-8 w-8',
 };
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
-  size?: ButtonSize;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'default', size = 'default', type = 'button', ...props }, ref) => (
+  ({ className, variant = 'default', type = 'button', ...props }, ref) => (
     <button
       ref={ref}
       type={type}
       className={cn(
-        'inline-flex items-center justify-center gap-1.5 rounded-md font-medium whitespace-nowrap transition-colors',
+        'inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-4 text-sm font-medium whitespace-nowrap transition-colors',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50',
         buttonVariants[variant],
-        buttonSizes[size],
         className,
       )}
       {...props}
@@ -48,8 +38,7 @@ Button.displayName = 'Button';
 
 const fieldClass =
   'w-full rounded-md border border-border bg-card px-3 text-sm shadow-xs transition-colors placeholder:text-muted-foreground ' +
-  'focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-50 ' +
-  'aria-invalid:border-destructive aria-invalid:outline-destructive';
+  'focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-50';
 
 export const Textarea = forwardRef<
   HTMLTextAreaElement,
@@ -79,12 +68,10 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   );
 }
 
-type BadgeVariant = 'default' | 'outline' | 'success' | 'destructive' | 'warning';
+type BadgeVariant = 'default' | 'success' | 'warning';
 const badgeVariants: Record<BadgeVariant, string> = {
   default: 'bg-muted text-foreground',
-  outline: 'border border-border text-muted-foreground',
   success: 'bg-accent-soft text-accent',
-  destructive: 'bg-destructive-soft text-destructive',
   warning: 'bg-changed text-amber-800',
 };
 

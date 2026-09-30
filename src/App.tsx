@@ -93,6 +93,7 @@ export function App() {
       { id, request, status: 'running', reply: '', calls: [], rejected: [] },
     ]);
 
+    let status: Turn['status'];
     let reply: string;
     let applied: readonly Call[] = [];
     try {
@@ -117,35 +118,36 @@ export function App() {
 
       switch (result.status) {
         case 'done':
-          if (todosRef.current !== snapshot && result.calls.length > 0) {
+          if (todosRef.current !== snapshot) {
             // The list changed while the model worked; don't overwrite that edit.
+            status = 'failed';
             reply =
               "Your list changed while I was working, so I didn't make those changes. Please ask again.";
-            updateTurn(id, (t) => ({ ...t, status: 'failed', reply }));
             break;
           }
+          status = 'done';
           reply = result.reply;
           applied = result.calls;
           commit(result.state);
           setHighlight(touchedIds(snapshot, result.state));
-          updateTurn(id, (t) => ({ ...t, status: 'done', reply, calls: result.calls }));
           break;
         case 'failed':
+          status = 'failed';
           reply = `Sorry, I couldn't do that without breaking a rule, so I didn't change anything. (${result.errors.join('; ')})`;
-          updateTurn(id, (t) => ({ ...t, status: 'failed', reply }));
           break;
         case 'aborted':
+          status = 'aborted';
           reply = 'Stopped. Nothing was changed.';
-          updateTurn(id, (t) => ({ ...t, status: 'aborted', reply }));
           break;
       }
     } catch (error: unknown) {
+      status = 'error';
       reply = `Something went wrong: ${errorMessage(error)}`;
-      updateTurn(id, (t) => ({ ...t, status: 'error', reply }));
     } finally {
       abortRef.current = null;
       setRunning(false);
     }
+    updateTurn(id, (t) => ({ ...t, status, reply, calls: applied }));
     // History records what actually happened, in the same shape the model answers in,
     // so a follow-up like "change that back" can see the calls it refers to.
     historyRef.current = [

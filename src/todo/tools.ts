@@ -1,11 +1,7 @@
 import { callSchema, type Call, type Todo, type TodoState } from './schema';
 
-export type CallResult = { ok: true; state: TodoState } | { ok: false; error: string };
-export type BatchResult = { ok: true; state: TodoState } | { ok: false; errors: string[] };
-
-function missing(id: string): string {
-  return `There is no todo with id "${id}". Copy the id from the current list.`;
-}
+type CallResult = { ok: true; state: TodoState } | { ok: false; error: string };
+type BatchResult = { ok: true; state: TodoState } | { ok: false; errors: string[] };
 
 /**
  * Applies one tool call. The UI and the assistant both come through here, so
@@ -18,6 +14,15 @@ export function applyCall(state: TodoState, input: Call): CallResult {
     return { ok: false, error: parsed.error.issues.map((i) => i.message).join('; ') };
   }
   const call = parsed.data;
+  if ('id' in call.args) {
+    const { id } = call.args;
+    if (!state.todos.some((t) => t.id === id)) {
+      return {
+        ok: false,
+        error: `There is no todo with id "${id}". Copy the id from the current list.`,
+      };
+    }
+  }
   const withTodos = (todos: readonly Todo[]): CallResult => ({
     ok: true,
     state: { ...state, todos },
@@ -37,8 +42,6 @@ export function applyCall(state: TodoState, input: Call): CallResult {
         },
       };
     case 'edit_todo': {
-      if (!state.todos.some((t) => t.id === call.args.id))
-        return { ok: false, error: missing(call.args.id) };
       const { id, title } = call.args;
       return withTodos(
         title === ''
@@ -46,20 +49,14 @@ export function applyCall(state: TodoState, input: Call): CallResult {
           : state.todos.map((t) => (t.id === id ? { ...t, title } : t)),
       );
     }
-    case 'toggle_todo': {
-      if (!state.todos.some((t) => t.id === call.args.id))
-        return { ok: false, error: missing(call.args.id) };
+    case 'toggle_todo':
       return withTodos(
         state.todos.map((t) => (t.id === call.args.id ? { ...t, completed: !t.completed } : t)),
       );
-    }
     case 'toggle_all':
       return withTodos(state.todos.map((t) => ({ ...t, completed: call.args.completed })));
-    case 'delete_todo': {
-      if (!state.todos.some((t) => t.id === call.args.id))
-        return { ok: false, error: missing(call.args.id) };
+    case 'delete_todo':
       return withTodos(state.todos.filter((t) => t.id !== call.args.id));
-    }
     case 'clear_completed':
       return withTodos(state.todos.filter((t) => !t.completed));
     case 'set_filter':

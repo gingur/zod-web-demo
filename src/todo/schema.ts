@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** A TodoMVC item: nothing more, nothing less. */
-export const todoSchema = z.object({
+const todoSchema = z.object({
   id: z.string(),
   title: z.string().trim().min(1),
   completed: z.boolean(),
@@ -9,7 +9,7 @@ export const todoSchema = z.object({
 export type Todo = z.infer<typeof todoSchema>;
 
 export const FILTERS = ['all', 'active', 'completed'] as const;
-export const filterSchema = z.enum(FILTERS);
+const filterSchema = z.enum(FILTERS);
 export type Filter = z.infer<typeof filterSchema>;
 
 export interface TodoState {
@@ -57,7 +57,7 @@ export const callSchema = z.discriminatedUnion('tool', [
     .describe('Show all, only active, or only completed todos.'),
 ]);
 export type Call = z.infer<typeof callSchema>;
-export type ToolName = Call['tool'];
+type ToolName = Call['tool'];
 
 /**
  * Everything the assistant returns on each turn: the changes to make, then a

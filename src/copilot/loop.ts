@@ -23,24 +23,16 @@ export interface ModelClient {
   generate(request: GenerateRequest): Promise<string>;
 }
 
-/** The reply-and-calls shape as JSON Schema, and the structural subset that constrains decoding. */
-export const replyJsonSchema = toJsonSchema(replySchema);
-export const decoderSchema = toDecoderSchema(replyJsonSchema);
+/** The structural subset of `replySchema` that constrains decoding. */
+export const decoderSchema = toDecoderSchema(toJsonSchema(replySchema));
 
 export type AssistantEvent =
   | { kind: 'attempt'; attempt: number }
   | { kind: 'text'; attempt: number; text: string }
-  | { kind: 'rejected'; attempt: number; errors: string[]; calls: readonly Call[] };
+  | { kind: 'rejected'; attempt: number; errors: string[] };
 
 export type AssistantResult =
-  | {
-      status: 'done';
-      reply: string;
-      calls: readonly Call[];
-      state: TodoState;
-      attempts: number;
-      text: string;
-    }
+  | { status: 'done'; reply: string; calls: readonly Call[]; state: TodoState; attempts: number }
   | { status: 'failed'; errors: string[]; attempts: number }
   | { status: 'aborted'; attempts: number };
 
@@ -93,7 +85,7 @@ export async function runAssistant(options: RunAssistantOptions): Promise<Assist
         messages,
         decoderSchema,
         onText: (t) => onEvent?.({ kind: 'text', attempt, text: t }),
-        ...(signal !== undefined ? { signal } : {}),
+        signal,
       });
     } catch (error: unknown) {
       if (isAbort(error, signal)) return { status: 'aborted', attempts: attempt };
@@ -101,29 +93,20 @@ export async function runAssistant(options: RunAssistantOptions): Promise<Assist
     }
     if (signal?.aborted) return { status: 'aborted', attempts: attempt };
 
-    let calls: readonly Call[] = [];
     let parsed: unknown;
     try {
       parsed = JSON.parse(text);
     } catch {
-      parsed = undefined;
       lastErrors = ['(root): the response was not valid JSON; it may have been cut off'];
     }
 
     if (parsed !== undefined) {
       const shape = replySchema.safeParse(parsed);
       if (shape.success) {
-        calls = shape.data.calls;
+        const { calls, reply } = shape.data;
         const applied = applyCalls(state, calls);
         if (applied.ok) {
-          return {
-            status: 'done',
-            reply: shape.data.reply,
-            calls,
-            state: applied.state,
-            attempts: attempt,
-            text,
-          };
+          return { status: 'done', reply, calls, state: applied.state, attempts: attempt };
         }
         lastErrors = applied.errors;
       } else {
@@ -131,7 +114,7 @@ export async function runAssistant(options: RunAssistantOptions): Promise<Assist
       }
     }
 
-    onEvent?.({ kind: 'rejected', attempt, errors: lastErrors, calls });
+    onEvent?.({ kind: 'rejected', attempt, errors: lastErrors });
     messages.push(
       { role: 'assistant', content: text },
       {

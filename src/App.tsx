@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { initialState, type Call, type TodoState } from '@/todo/schema';
 import { applyCall } from '@/todo/tools';
 import { TodoApp } from '@/todo/TodoApp';
@@ -28,7 +28,7 @@ function touchedIds(before: TodoState, after: TodoState): Set<string> {
 }
 
 export function App() {
-  const webgpu = useMemo(hasWebGPU, []);
+  const webgpu = hasWebGPU();
   const [todos, setTodos] = useState<TodoState>(initialState);
   const todosRef = useRef<TodoState>(initialState);
   const [highlight, setHighlight] = useState<ReadonlySet<string>>(new Set());

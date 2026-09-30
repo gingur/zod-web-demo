@@ -23,7 +23,7 @@ export function TodoApp({ state, dispatch, highlight, disabled = false }: TodoAp
 
   const commitEdit = () => {
     if (editing === null) return;
-    dispatch({ tool: 'edit_todo', args: { id: editing.id, title: editing.title } });
+    dispatch({ tool: 'edit_todo', args: editing });
     setEditing(null);
   };
 

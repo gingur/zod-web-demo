@@ -63,7 +63,6 @@ export async function loadWebLLM(
   }
 
   return {
-    label: option.label,
     async generate({ messages, decoderSchema, onText, signal }: GenerateRequest): Promise<string> {
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       const onAbort = () => engine.interruptGenerate();

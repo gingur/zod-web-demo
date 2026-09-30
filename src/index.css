@@ -3,7 +3,6 @@
 @import 'todomvc-app-css/index.css' layer(base);
 
 @theme {
-  --color-foreground: #18181b;
   --color-card: #ffffff;
   --color-muted: #f4f4f5;
   --color-muted-foreground: #71717a;

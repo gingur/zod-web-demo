@@ -19,7 +19,6 @@ export interface GenerateRequest {
 }
 
 export interface ModelClient {
-  readonly label: string;
   generate(request: GenerateRequest): Promise<string>;
 }
 

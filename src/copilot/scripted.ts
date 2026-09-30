@@ -1,4 +1,4 @@
-import { TOOLS, type AssistantReply, type Todo } from '@/todo/schema';
+import { TOOLS, type AssistantReply, type Call, type Todo } from '@/todo/schema';
 import type { ChatMessage, GenerateRequest, ModelClient } from './loop';
 import { REQUEST_PREFIX, STATE_HEADER } from './prompt';
 
@@ -6,7 +6,7 @@ type Responder = (todos: readonly Todo[]) => AssistantReply;
 
 interface SuggestedPrompt {
   text: string;
-  /** What the scripted model returns on each attempt, used only without WebGPU. */
+  /** What the scripted model returns on each attempt, used only in scripted mode. */
   script: readonly Responder[];
 }
 
@@ -25,8 +25,10 @@ export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
       }),
       (todos) => {
         const milk = todos.find((t) => t.title.toLowerCase() === 'buy milk');
-        // toggle_todo flips, so only call it when there is something to mark done.
-        const toggle = milk !== undefined && !milk.completed;
+        const calls: Call[] = [
+          { tool: 'add_todo', args: { title: 'Eggs' } },
+          { tool: 'add_todo', args: { title: 'Bread' } },
+        ];
         let reply: string;
         if (milk === undefined) {
           reply =
@@ -34,16 +36,11 @@ export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
         } else if (milk.completed) {
           reply = "Added eggs and bread. 'Buy milk' was already done.";
         } else {
+          // toggle_todo flips, so only call it when there is something to mark done.
           reply = "Added eggs and bread, and marked 'Buy milk' as done.";
+          calls.push({ tool: 'toggle_todo', args: { id: milk.id } });
         }
-        return {
-          reply,
-          calls: [
-            { tool: 'add_todo', args: { title: 'Eggs' } },
-            { tool: 'add_todo', args: { title: 'Bread' } },
-            ...(toggle ? [{ tool: 'toggle_todo' as const, args: { id: milk.id } }] : []),
-          ],
-        };
+        return { reply, calls };
       },
     ],
   },
@@ -117,13 +114,12 @@ const sleep = (ms: number, signal?: AbortSignal) =>
   });
 
 /**
- * A stand-in for machines without WebGPU. It replays scripted responses for
+ * A stand-in model for scripted mode (for example, without WebGPU). It replays scripted responses for
  * the suggested prompts, streamed at a readable pace, through the same
  * validation loop as the real model.
  */
 export function createScriptedModel(charsPerTick = 6, tickMs = 16): ModelClient {
   return {
-    label: 'Scripted (no WebGPU)',
     async generate({ messages, onText, signal }: GenerateRequest): Promise<string> {
       const { todos, request, attempt } = parseTurn(messages);
       const prompt = SUGGESTED_PROMPTS.find((p) => p.text === request);

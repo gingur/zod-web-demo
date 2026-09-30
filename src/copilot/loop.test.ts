@@ -21,7 +21,6 @@ const base = {
 function sequenceModel(responses: readonly string[]) {
   const calls: ChatMessage[][] = [];
   const model: ModelClient = {
-    label: 'test',
     async generate({ messages, onText }) {
       calls.push([...messages]);
       const text = responses[calls.length - 1];
@@ -109,7 +108,6 @@ describe('runAssistant', () => {
   test('stops when aborted', async () => {
     const controller = new AbortController();
     const model: ModelClient = {
-      label: 'abort',
       async generate() {
         controller.abort();
         throw new DOMException('Aborted', 'AbortError');

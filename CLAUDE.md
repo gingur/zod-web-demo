@@ -13,7 +13,7 @@ CI runs devkit's `toolchain.verify` with `test: 'test:ci'`, which installs Chrom
 
 ## Layout
 
-- `src/todo/`: the schema (todo, the seven tools, the `{ calls, reply }` answer shape), the tool reducer, and the TodoMVC component.
+- `src/todo/`: the schema (the Todo type, the seven tools, the `{ calls, reply }` answer shape), the tool reducer, and the TodoMVC component.
 - `src/copilot/`: the prompt (persona, tools, worked examples, history), the validate-and-retry loop (`loop.ts`), the WebLLM client (runs in `worker.ts`), the scripted fallback model, and the chat panel.
 - `src/schema/jsonSchema.ts`: Zod to JSON Schema, and `toDecoderSchema`, which keeps only the structural keywords the decoder needs.
 - `src/components/ui/`: the few shadcn-style primitives the chat panel uses, on Tailwind v4.

@@ -1,9 +1,8 @@
-import {
-  forwardRef,
-  type ButtonHTMLAttributes,
-  type HTMLAttributes,
-  type SelectHTMLAttributes,
-  type TextareaHTMLAttributes,
+import type {
+  ButtonHTMLAttributes,
+  HTMLAttributes,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
 } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -19,10 +18,9 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
 }
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'default', type = 'button', ...props }, ref) => (
+export function Button({ className, variant = 'default', type = 'button', ...props }: ButtonProps) {
+  return (
     <button
-      ref={ref}
       type={type}
       className={cn(
         'inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-4 text-sm font-medium whitespace-nowrap transition-colors',
@@ -32,32 +30,20 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       )}
       {...props}
     />
-  ),
-);
-Button.displayName = 'Button';
+  );
+}
 
 const fieldClass =
   'w-full rounded-md border border-border bg-card px-3 text-sm shadow-xs transition-colors placeholder:text-muted-foreground ' +
   'focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-50';
 
-export const Textarea = forwardRef<
-  HTMLTextAreaElement,
-  TextareaHTMLAttributes<HTMLTextAreaElement>
->(({ className, ...props }, ref) => (
-  <textarea
-    ref={ref}
-    className={cn(fieldClass, 'min-h-16 resize-none py-2', className)}
-    {...props}
-  />
-));
-Textarea.displayName = 'Textarea';
+export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={cn(fieldClass, 'min-h-16 resize-none py-2', className)} {...props} />;
+}
 
-export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
-  ({ className, ...props }, ref) => (
-    <select ref={ref} className={cn(fieldClass, 'h-9 pr-8', className)} {...props} />
-  ),
-);
-NativeSelect.displayName = 'NativeSelect';
+export function NativeSelect({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select className={cn(fieldClass, 'h-9 pr-8', className)} {...props} />;
+}
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (

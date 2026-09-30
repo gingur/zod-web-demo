@@ -1,12 +1,14 @@
 import { z } from 'zod';
 
-/** A TodoMVC item: nothing more, nothing less. */
-const todoSchema = z.object({
-  id: z.string(),
-  title: z.string().trim().min(1),
-  completed: z.boolean(),
-});
-export type Todo = z.infer<typeof todoSchema>;
+/**
+ * A TodoMVC item: nothing more, nothing less. A plain type, because todos are
+ * only ever changed by the tool calls below, and those are what Zod validates.
+ */
+export interface Todo {
+  id: string;
+  title: string;
+  completed: boolean;
+}
 
 export const FILTERS = ['all', 'active', 'completed'] as const;
 const filterSchema = z.enum(FILTERS);

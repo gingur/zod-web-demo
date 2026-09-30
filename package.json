@@ -31,7 +31,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@gingur/devkit": "git+https://github.com/gingur/devkit.git#main",
+    "@gingur/devkit": "github:gingur/devkit#main",
     "@storybook/addon-docs": "^10.6.1",
     "@storybook/addon-vitest": "^10.6.1",
     "@storybook/react-vite": "^10.6.1",

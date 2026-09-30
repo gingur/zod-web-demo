@@ -1,8 +1,7 @@
 import type { z } from 'zod';
-import { toDecoderSchema, toJsonSchema, type JsonSchemaNode } from '@/schema/jsonSchema';
-import { replySchema, type Call, type TodoState } from '@/todo/schema';
+import type { JsonSchemaNode } from '@/schema/jsonSchema';
+import type { Call, TodoState } from '@/todo/schema';
 import { applyCalls } from '@/todo/tools';
-import { buildMessages } from './prompt';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -11,8 +10,8 @@ export interface ChatMessage {
 
 export interface GenerateRequest {
   messages: readonly ChatMessage[];
-  /** Constrains decoding. The model can only emit JSON of this shape. */
-  decoderSchema: JsonSchemaNode;
+  /** Constrains decoding to JSON of this shape. Omitted for free text. */
+  decoderSchema?: JsonSchemaNode;
   /** Called with the full text generated so far. */
   onText?: (text: string) => void;
   signal?: AbortSignal;
@@ -31,56 +30,63 @@ export class ResampleError extends Error {
   override name = 'ResampleError';
 }
 
-/** The structural subset of `replySchema` that constrains decoding. */
-export const decoderSchema = toDecoderSchema(toJsonSchema(replySchema));
-
 export type AssistantEvent =
   | { kind: 'attempt'; attempt: number }
   | { kind: 'text'; attempt: number; text: string }
   | { kind: 'rejected'; attempt: number; errors: string[] };
 
-type AssistantResult =
-  | { status: 'done'; reply: string; calls: readonly Call[]; state: TodoState; attempts: number }
+type Checked<T> = { ok: true; value: T } | { ok: false; errors: string[] };
+type Check<T> = (text: string) => Checked<T>;
+
+type Generated<T> =
+  | { status: 'ok'; value: T; attempts: number }
   | { status: 'failed'; errors: string[]; attempts: number }
   | { status: 'aborted'; attempts: number };
 
-export interface RunAssistantOptions {
-  state: TodoState;
-  /** Earlier requests and accepted replies; trimmed to the last few by the prompt builder. */
-  history: readonly ChatMessage[];
-  request: string;
-  model: ModelClient;
-  maxAttempts?: number;
-  signal?: AbortSignal;
-  onEvent?: (event: AssistantEvent) => void;
+export function formatIssues(issues: readonly z.core.$ZodIssue[]): string[] {
+  return issues.map(
+    (issue) => `${issue.path.length > 0 ? issue.path.join('.') : '(root)'}: ${issue.message}`,
+  );
+}
+
+/** Parses JSON, then validates it with a Zod schema. */
+function parseJson<T>(schema: z.ZodType<T>, text: string): Checked<T> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { ok: false, errors: ['(root): not valid JSON; it may have been cut off'] };
+  }
+  const result = schema.safeParse(parsed);
+  return result.success
+    ? { ok: true, value: result.data }
+    : { ok: false, errors: formatIssues(result.error.issues) };
 }
 
 function isAbort(error: unknown, signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true || (error instanceof DOMException && error.name === 'AbortError');
 }
 
-function formatIssues(issues: readonly z.core.$ZodIssue[]): string[] {
-  return issues.map(
-    (issue) => `${issue.path.length > 0 ? issue.path.join('.') : '(root)'}: ${issue.message}`,
-  );
-}
-
 /**
- * One chat turn. The model answers under a constrained decoder with a reply
- * and a list of tool calls. Zod checks the shape, then the calls are applied
- * to a copy of the list, all or nothing, which catches what the decoder can't
- * (an id that doesn't exist, an empty title). Failures go back to the model
- * until it passes or the attempt budget runs out. Nothing changes the real
- * list unless the whole turn is valid; the caller commits `state`.
+ * Generates until `check` accepts the text or the attempt budget runs out.
+ * A rejected answer goes back to the model with the reasons, so it can fix
+ * them. A ResampleError just draws again.
  */
-export async function runAssistant(options: RunAssistantOptions): Promise<AssistantResult> {
-  const { state, model, signal, onEvent } = options;
+export async function generateChecked<T>(options: {
+  model: ModelClient;
+  messages: readonly ChatMessage[];
+  decoderSchema?: JsonSchemaNode;
+  check: Check<T>;
+  maxAttempts?: number;
+  signal?: AbortSignal;
+  onEvent?: (event: AssistantEvent) => void;
+}): Promise<Generated<T>> {
+  const { model, decoderSchema, check, signal, onEvent } = options;
   const maxAttempts = options.maxAttempts ?? 3;
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
     throw new RangeError(`maxAttempts must be a positive integer, got ${maxAttempts}`);
   }
-
-  const messages = buildMessages(state, options.history, options.request);
+  const messages = [...options.messages];
   let lastErrors: string[] = [];
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -103,26 +109,9 @@ export async function runAssistant(options: RunAssistantOptions): Promise<Assist
     }
     if (signal?.aborted) return { status: 'aborted', attempts: attempt };
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      lastErrors = ['(root): the response was not valid JSON; it may have been cut off'];
-    }
-
-    if (parsed !== undefined) {
-      const shape = replySchema.safeParse(parsed);
-      if (shape.success) {
-        const { calls, reply } = shape.data;
-        const applied = applyCalls(state, calls);
-        if (applied.ok) {
-          return { status: 'done', reply, calls, state: applied.state, attempts: attempt };
-        }
-        lastErrors = applied.errors;
-      } else {
-        lastErrors = formatIssues(shape.error.issues);
-      }
-    }
+    const result = check(text);
+    if (result.ok) return { status: 'ok', value: result.value, attempts: attempt };
+    lastErrors = result.errors;
 
     onEvent?.({ kind: 'rejected', attempt, errors: lastErrors });
     messages.push(
@@ -132,10 +121,24 @@ export async function runAssistant(options: RunAssistantOptions): Promise<Assist
         content:
           'That answer failed validation, so nothing was changed:\n' +
           lastErrors.map((e) => `- ${e}`).join('\n') +
-          '\nFix these problems and answer again with the complete reply and calls.',
+          '\nFix these problems and answer again.',
       },
     );
   }
-
   return { status: 'failed', errors: lastErrors, attempts: maxAttempts };
+}
+
+/** Parses an answer into calls and applies them to a copy of the list, all or nothing. */
+export function checkCalls<T extends { calls: readonly Call[] }>(
+  schema: z.ZodType<T>,
+  state: TodoState,
+): Check<T & { state: TodoState }> {
+  return (text) => {
+    const shape = parseJson(schema, text);
+    if (!shape.ok) return shape;
+    const applied = applyCalls(state, shape.value.calls);
+    return applied.ok
+      ? { ok: true, value: { ...shape.value, state: applied.state } }
+      : { ok: false, errors: applied.errors };
+  };
 }

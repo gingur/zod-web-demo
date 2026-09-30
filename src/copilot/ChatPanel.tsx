@@ -41,7 +41,7 @@ interface ChatPanelProps {
 function CallLine({ call }: { call: Call }) {
   return (
     <li className="font-mono text-[11px] text-muted-foreground">
-      <span className="text-accent">✓ {call.tool}</span> {JSON.stringify(call.args)}
+      <span className="text-accent">✓ {call.name}</span> {JSON.stringify(call.arguments)}
     </li>
   );
 }

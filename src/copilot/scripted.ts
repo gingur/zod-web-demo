@@ -1,86 +1,72 @@
-import { TOOLS, type AssistantReply, type Call, type Todo } from '@/todo/schema';
+import { contextSchema, type Call, type Plan, type Todo } from '@/todo/schema';
 import type { ChatMessage, GenerateRequest, ModelClient } from './loop';
 import { REQUEST_PREFIX, STATE_HEADER } from './prompt';
 
-type Responder = (todos: readonly Todo[]) => AssistantReply;
+type Planner = (todos: readonly Todo[]) => Plan;
 
 interface SuggestedPrompt {
   text: string;
-  /** What the scripted model returns on each attempt, used only in scripted mode. */
-  script: readonly Responder[];
+  /** What the scripted planner returns on each attempt. */
+  plan: readonly Planner[];
+  /** What the scripted answerer says, for a question. */
+  answer?: string;
 }
 
 export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
   {
     text: 'Add eggs and bread, and mark buy milk as done.',
-    script: [
+    plan: [
       // First attempt guesses an id instead of copying it; the tool rejects it.
       () => ({
-        reply: "Added eggs and bread, and marked 'Buy milk' as done.",
+        intent: 'change_list',
         calls: [
-          { tool: 'add_todo', args: { title: 'Eggs' } },
-          { tool: 'add_todo', args: { title: 'Bread' } },
-          { tool: 'toggle_todo', args: { id: 'buy-milk' } },
+          { name: 'add_todo', arguments: { title: 'Eggs' } },
+          { name: 'add_todo', arguments: { title: 'Bread' } },
+          { name: 'mark_todo', arguments: { id: 'buy-milk', completed: true } },
         ],
       }),
       (todos) => {
         const milk = todos.find((t) => t.title.toLowerCase() === 'buy milk');
         const calls: Call[] = [
-          { tool: 'add_todo', args: { title: 'Eggs' } },
-          { tool: 'add_todo', args: { title: 'Bread' } },
+          { name: 'add_todo', arguments: { title: 'Eggs' } },
+          { name: 'add_todo', arguments: { title: 'Bread' } },
         ];
-        let reply: string;
-        if (milk === undefined) {
-          reply =
-            "Added eggs and bread. I couldn't find 'Buy milk' in your list, so I left that part.";
-        } else if (milk.completed) {
-          reply = "Added eggs and bread. 'Buy milk' was already done.";
-        } else {
-          // toggle_todo flips, so only call it when there is something to mark done.
-          reply = "Added eggs and bread, and marked 'Buy milk' as done.";
-          calls.push({ tool: 'toggle_todo', args: { id: milk.id } });
+        if (milk !== undefined) {
+          calls.push({ name: 'mark_todo', arguments: { id: milk.id, completed: true } });
         }
-        return { reply, calls };
+        return { intent: 'change_list', calls };
       },
     ],
   },
   {
     text: "Clear the finished ones and show me what's left.",
-    script: [
-      (): AssistantReply => ({
-        reply: 'Cleared your completed todos and switched the view to active ones.',
+    plan: [
+      // Annotated: without it, `{}` and `{ filter }` widen into an invalid union.
+      (): Plan => ({
+        intent: 'change_list',
         calls: [
-          { tool: 'clear_completed', args: {} },
-          { tool: 'set_filter', args: { filter: 'active' } },
+          { name: 'clear_completed', arguments: {} },
+          { name: 'set_filter', arguments: { filter: 'active' } },
         ],
       }),
     ],
   },
   {
     text: 'What can you do?',
-    script: [
-      () => ({
-        reply: `I can do anything the app's own controls can: ${TOOLS.map((t) => t.name.replace('_', ' ')).join(', ')}. Just tell me what you need.`,
-        calls: [],
-      }),
-    ],
+    plan: [() => ({ intent: 'about_list', calls: [] })],
+    answer:
+      'I can add, rename, complete and delete todos, clear the completed ones, and filter the list. What would you like to do?',
   },
   {
     text: 'Write me a poem about cats.',
-    script: [
-      () => ({
-        reply:
-          "Sorry, I can only help with your todo list. I could add 'Write a poem about cats' as a todo, if you like.",
-        calls: [],
-      }),
-    ],
+    plan: [() => ({ intent: 'off_topic', calls: [] })],
   },
 ];
 
 const STATE_MARKER = `${STATE_HEADER}\n`;
 const REQUEST_MARKER = `\n${REQUEST_PREFIX}`;
 
-/** Reads the list and the request back out of the latest turn's user message. */
+/** Reads the context and the request back out of the latest turn's user message. */
 function parseTurn(messages: readonly ChatMessage[]): {
   todos: readonly Todo[];
   request: string;
@@ -91,11 +77,11 @@ function parseTurn(messages: readonly ChatMessage[]): {
   const turn = messages[index];
   if (turn === undefined) throw new Error('Scripted model: unexpected prompt format');
   const { content } = turn;
-  // The list is one JSON line, right after the marker.
-  const listEnd = content.indexOf('\n', STATE_MARKER.length);
+  // The context is one JSON line, right after the marker.
+  const contextEnd = content.indexOf('\n', STATE_MARKER.length);
   return {
-    todos: JSON.parse(content.slice(STATE_MARKER.length, listEnd)) as readonly Todo[],
-    request: content.slice(content.indexOf(REQUEST_MARKER) + REQUEST_MARKER.length).trim(),
+    todos: contextSchema.parse(JSON.parse(content.slice(STATE_MARKER.length, contextEnd))).todos,
+    request: content.slice(content.lastIndexOf(REQUEST_MARKER) + REQUEST_MARKER.length).trim(),
     attempt: messages.slice(index).filter((m) => m.role === 'assistant').length,
   };
 }
@@ -114,23 +100,25 @@ const sleep = (ms: number, signal?: AbortSignal) =>
   });
 
 /**
- * A stand-in model for scripted mode (for example, without WebGPU). It replays scripted responses for
- * the suggested prompts, streamed at a readable pace, through the same
- * validation loop as the real model.
+ * A stand-in for machines without WebGPU. It replays scripted answers for the
+ * suggested prompts, streamed at a readable pace, through the same pipeline
+ * and validation as the real model. A request with a decoder schema is the
+ * planner; one without is the question answerer.
  */
 export function createScriptedModel(charsPerTick = 6, tickMs = 16): ModelClient {
   return {
-    async generate({ messages, onText, signal }: GenerateRequest): Promise<string> {
+    async generate({ messages, decoderSchema, onText, signal }: GenerateRequest): Promise<string> {
       const { todos, request, attempt } = parseTurn(messages);
       const prompt = SUGGESTED_PROMPTS.find((p) => p.text === request);
-      const responder = prompt?.script[Math.min(attempt, prompt.script.length - 1)];
-      const response: AssistantReply = responder?.(todos) ?? {
-        reply: 'Scripted mode only knows the suggested prompts. Load a model to ask me anything.',
-        calls: [],
-      };
-
-      // Same key order the real model is constrained to: calls, then reply.
-      const text = JSON.stringify({ calls: response.calls, reply: response.reply }, null, 2);
+      let text: string;
+      if (decoderSchema !== undefined) {
+        const planner = prompt?.plan[Math.min(attempt, prompt.plan.length - 1)];
+        text = JSON.stringify(planner?.(todos) ?? { intent: 'about_list', calls: [] }, null, 2);
+      } else {
+        text =
+          prompt?.answer ??
+          'Scripted mode only knows the suggested prompts. Load a model to ask me anything.';
+      }
       for (let i = charsPerTick; i < text.length + charsPerTick; i += charsPerTick) {
         await sleep(tickMs, signal);
         onText?.(text.slice(0, i));

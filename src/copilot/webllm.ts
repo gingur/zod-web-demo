@@ -84,7 +84,14 @@ export async function loadWebLLM(
           stream: true,
           temperature: 0.1,
           max_tokens: 1200,
-          response_format: { type: 'json_object', schema: JSON.stringify(decoderSchema) },
+          ...(decoderSchema === undefined
+            ? {}
+            : {
+                response_format: {
+                  type: 'json_object' as const,
+                  schema: JSON.stringify(decoderSchema),
+                },
+              }),
         });
         let text = '';
         for await (const chunk of chunks) {

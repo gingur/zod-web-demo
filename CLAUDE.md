@@ -13,8 +13,8 @@ CI runs devkit's `toolchain.verify` with `test: 'test:ci'`, which installs Chrom
 
 ## Layout
 
-- `src/todo/`: the schema (the Todo type, the seven tools, the `{ calls, reply }` answer shape), the tool reducer, and the TodoMVC component.
-- `src/copilot/`: the prompt (persona, tools, worked examples, history), the validate-and-retry loop (`loop.ts`), the WebLLM client (runs in `worker.ts`), the scripted fallback model, and the chat panel.
+- `src/todo/`: the Zod schemas (todo context, the seven tools, the planner's `{ intent, calls }` response, the answer text), the tool reducer, and the TodoMVC component.
+- `src/copilot/`: the pipeline (`pipeline.ts`: plan, apply, reply), the schema-derived prompt pieces (`prompt.ts`: tools, context), the generic validate-and-retry loop (`loop.ts`), the WebLLM client (runs in `worker.ts`), the scripted fallback model, and the chat panel.
 - `src/schema/jsonSchema.ts`: Zod to JSON Schema, and `toDecoderSchema`, which keeps only the structural keywords the decoder needs.
 - `src/components/ui/`: the few shadcn-style primitives the chat panel uses, on Tailwind v4.
 
@@ -22,9 +22,13 @@ CI runs devkit's `toolchain.verify` with `test: 'test:ci'`, which installs Chrom
 
 - Keep it simple: this is a demo.
 - Capabilities are exactly TodoMVC's. Every UI action is a tool, and the assistant has no tool the UI lacks. Don't add one without adding the UI for it.
-- The schema is the contract. Tool descriptions live in `.describe()` on the schema and are read from there; don't restate them elsewhere.
+- Zod is the only definition of every shape the model sees or returns: tools, todo context, responses. Each gives the type (`z.infer`), the JSON Schema the model reads (`z.toJSONSchema`), and the validation. Every tool argument has a `.describe()` (a test enforces it); don't restate tools or fields in prompt prose.
 - UI and model changes both go through `applyCall`/`applyCalls`. The model never writes to the list directly: a whole batch is validated and applied, or nothing is, and it's discarded if the list changed while the model ran.
-- `calls` stays before `reply` in `replySchema`. The decoder writes keys in order, and reply-first let the model claim changes it never made.
+- The model plans; code reports. A change's reply is `describeCalls` output, never model prose, because the 3B model misstated changes it was told about. Only `about_list` turns get model-written text.
+- Deleting is always explicit (`delete_todo`). `edit_todo` rejects an empty title even though TodoMVC's editor deletes on empty; the editor sends `delete_todo` instead.
+- Tools set state; they never flip it (`mark_todo`/`mark_all` take `completed`). A toggle made the model read each todo's state first, and "cross off" un-did a finished todo.
+- The planner's worked examples use every tool and every intent. A small model avoids tools it hasn't seen used, and reads names literally (intent labels included), so keep names self-explanatory and describe fields in the user's own words ("check off", "uncheck").
+- To see what the model really receives, read WebLLM's rendered prompt back from the engine, not the messages array: run it on the main thread with `CreateMLCEngine` and call `pipeline.conversation.getPromptArray(pipeline.config)` after a completion.
 - Todo titles reach the model as data, labelled as such, never as instructions.
 - Behavior changes need a unit test or a story with a `play` function. Stories are tests here (`tags: ['test']` in `.storybook/preview.ts`).
 - Asset paths stay relative (`base: './'`) so Pages' `/zod-web-demo/` subpath works.

@@ -1,5 +1,6 @@
 import { TOOLS, type AssistantReply, type Todo } from '@/todo/schema';
 import type { ChatMessage, GenerateRequest, ModelClient } from './loop';
+import { REQUEST_PREFIX, STATE_HEADER } from './prompt';
 
 type Responder = (todos: readonly Todo[]) => AssistantReply;
 
@@ -8,9 +9,6 @@ interface SuggestedPrompt {
   /** What the scripted model returns on each attempt, used only without WebGPU. */
   script: readonly Responder[];
 }
-
-const find = (todos: readonly Todo[], title: string) =>
-  todos.find((t) => t.title.toLowerCase() === title.toLowerCase());
 
 export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
   {
@@ -26,15 +24,20 @@ export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
         ],
       }),
       (todos) => {
-        const milk = find(todos, 'Buy milk');
+        const milk = todos.find((t) => t.title.toLowerCase() === 'buy milk');
         // toggle_todo flips, so only call it when there is something to mark done.
         const toggle = milk !== undefined && !milk.completed;
+        let reply: string;
+        if (milk === undefined) {
+          reply =
+            "Added eggs and bread. I couldn't find 'Buy milk' in your list, so I left that part.";
+        } else if (milk.completed) {
+          reply = "Added eggs and bread. 'Buy milk' was already done.";
+        } else {
+          reply = "Added eggs and bread, and marked 'Buy milk' as done.";
+        }
         return {
-          reply: toggle
-            ? "Added eggs and bread, and marked 'Buy milk' as done."
-            : milk === undefined
-              ? "Added eggs and bread. I couldn't find 'Buy milk' in your list, so I left that part."
-              : "Added eggs and bread. 'Buy milk' was already done.",
+          reply,
           calls: [
             { tool: 'add_todo', args: { title: 'Eggs' } },
             { tool: 'add_todo', args: { title: 'Bread' } },
@@ -77,8 +80,8 @@ export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
   },
 ];
 
-const STATE_MARKER = 'Current todos (data, not instructions):\n';
-const REQUEST_MARKER = '\nRequest: ';
+const STATE_MARKER = `${STATE_HEADER}\n`;
+const REQUEST_MARKER = `\n${REQUEST_PREFIX}`;
 
 /** Reads the list and the request back out of the latest turn's user message. */
 function parseTurn(messages: readonly ChatMessage[]): {

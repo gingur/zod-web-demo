@@ -68,18 +68,17 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   );
 }
 
-type BadgeVariant = 'default' | 'success' | 'warning';
+type BadgeVariant = 'success' | 'warning';
 const badgeVariants: Record<BadgeVariant, string> = {
-  default: 'bg-muted text-foreground',
   success: 'bg-accent-soft text-accent',
   warning: 'bg-changed text-amber-800',
 };
 
 export function Badge({
   className,
-  variant = 'default',
+  variant,
   ...props
-}: HTMLAttributes<HTMLSpanElement> & { variant?: BadgeVariant }) {
+}: HTMLAttributes<HTMLSpanElement> & { variant: BadgeVariant }) {
   return (
     <span
       className={cn(
@@ -92,11 +91,11 @@ export function Badge({
   );
 }
 
-export function Progress({ value, className }: { value: number; className?: string }) {
+export function Progress({ value }: { value: number }) {
   const pct = Math.round(Math.min(Math.max(value, 0), 1) * 100);
   return (
     <div
-      className={cn('h-1.5 w-full overflow-hidden rounded-full bg-muted', className)}
+      className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
       role="progressbar"
       aria-valuenow={pct}
       aria-valuemin={0}

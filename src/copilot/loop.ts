@@ -31,7 +31,7 @@ export type AssistantEvent =
   | { kind: 'text'; attempt: number; text: string }
   | { kind: 'rejected'; attempt: number; errors: string[] };
 
-export type AssistantResult =
+type AssistantResult =
   | { status: 'done'; reply: string; calls: readonly Call[]; state: TodoState; attempts: number }
   | { status: 'failed'; errors: string[]; attempts: number }
   | { status: 'aborted'; attempts: number };

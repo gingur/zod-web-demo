@@ -1,7 +1,7 @@
 import type { InitProgressReport, MLCEngineInterface } from '@mlc-ai/web-llm';
 import type { GenerateRequest, ModelClient } from './loop';
 
-export interface ModelOption {
+interface ModelOption {
   id: string;
   label: string;
   approxDownload: string;

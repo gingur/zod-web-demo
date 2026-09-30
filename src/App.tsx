@@ -1,77 +1,60 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Badge, Button, Card } from '@/components/ui';
-import { cn } from '@/lib/utils';
-import { setAt, type Path } from '@/lib/path';
-import {
-  CROSS_FIELD_RULES,
-  campaignSchema,
-  defaultCampaign,
-  type Campaign,
-} from '@/schema/campaign';
-import { toDecoderSchema, toJsonSchema } from '@/schema/jsonSchema';
-import { deriveFields } from '@/form/fields';
-import { SchemaForm } from '@/form/SchemaForm';
-import { validationErrors } from '@/form/errors';
+import { useMemo, useRef, useState } from 'react';
+import { initialState, type Call, type TodoState } from '@/todo/schema';
+import { applyCall } from '@/todo/tools';
+import { TodoApp } from '@/todo/TodoApp';
 import { ChatPanel, type EngineState, type Turn } from '@/copilot/ChatPanel';
-import { changedPrefixes } from '@/copilot/diff';
-import { runCopilot, type ModelClient } from '@/copilot/loop';
+import { runAssistant, type ChatMessage, type ModelClient } from '@/copilot/loop';
+import { partialReply } from '@/copilot/prompt';
 import { createScriptedModel, SUGGESTED_PROMPTS } from '@/copilot/scripted';
 import { DEFAULT_MODEL_ID, MODEL_OPTIONS, hasWebGPU, loadWebLLM } from '@/copilot/webllm';
 
-const promptSchema = toJsonSchema(campaignSchema);
-const decoderSchema = toDecoderSchema(promptSchema);
-const fields = deriveFields(promptSchema);
 const suggestions = SUGGESTED_PROMPTS.map((p) => p.text);
-
-type Tab = 'form' | 'schema' | 'decoder' | 'json';
-const TABS: readonly { id: Tab; label: string }[] = [
-  { id: 'form', label: 'Form' },
-  { id: 'schema', label: 'JSON Schema' },
-  { id: 'decoder', label: 'Decoder schema' },
-  { id: 'json', label: 'Config JSON' },
-];
-
-function localToday(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** Ids a turn added or changed, so the list can flash them. */
+function touchedIds(before: TodoState, after: TodoState): Set<string> {
+  const old = new Map(before.todos.map((t) => [t.id, t]));
+  return new Set(
+    after.todos
+      .filter((t) => {
+        const prev = old.get(t.id);
+        return prev === undefined || prev.title !== t.title || prev.completed !== t.completed;
+      })
+      .map((t) => t.id),
+  );
+}
+
 export function App() {
   const webgpu = useMemo(hasWebGPU, []);
-  const [draft, setDraft] = useState<unknown>(defaultCampaign);
-  const draftRef = useRef<unknown>(defaultCampaign);
-  const [history, setHistory] = useState<unknown[]>([]);
-  const [tab, setTab] = useState<Tab>('form');
-  const [changed, setChanged] = useState<ReadonlySet<string>>(new Set());
-  const [changeRevision, setChangeRevision] = useState(0);
+  const [todos, setTodos] = useState<TodoState>(initialState);
+  const todosRef = useRef<TodoState>(initialState);
+  const [highlight, setHighlight] = useState<ReadonlySet<string>>(new Set());
 
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
   const [engine, setEngine] = useState<EngineState>({ kind: 'idle' });
   const modelRef = useRef<(ModelClient & { unload?: () => Promise<void> }) | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
+  const historyRef = useRef<ChatMessage[]>([]);
   const [running, setRunning] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const nextTurnId = useRef(1);
 
-  const commitDraft = useCallback((next: unknown) => {
-    draftRef.current = next;
-    setDraft(next);
-  }, []);
+  const commit = (next: TodoState) => {
+    todosRef.current = next;
+    setTodos(next);
+  };
 
-  const errors = useMemo(() => validationErrors(campaignSchema, draft), [draft]);
-  const valid = errors.size === 0;
-
-  const onFieldChange = useCallback(
-    (path: Path, value: unknown) => {
-      commitDraft(setAt(draftRef.current, path, value));
-      setChanged(new Set());
-    },
-    [commitDraft],
-  );
+  /** The UI's controls go through the same validated tools as the assistant. */
+  const dispatch = (call: Call) => {
+    const result = applyCall(todosRef.current, call);
+    if (result.ok) {
+      commit(result.state);
+      setHighlight(new Set());
+    }
+  };
 
   const updateTurn = (id: number, update: (t: Turn) => Turn) =>
     setTurns((ts) => ts.map((t) => (t.id === id ? update(t) : t)));
@@ -82,10 +65,9 @@ export function App() {
     setEngine({ kind: 'loading', progress: { fraction: 0, text: 'Starting…' } });
     try {
       await modelRef.current?.unload?.();
-      const model = await loadWebLLM(option, (progress) =>
+      modelRef.current = await loadWebLLM(option, (progress) =>
         setEngine({ kind: 'loading', progress }),
       );
-      modelRef.current = model;
       setEngine({ kind: 'ready', label: option.label, scripted: false });
     } catch (error: unknown) {
       modelRef.current = null;
@@ -102,204 +84,111 @@ export function App() {
     const model = modelRef.current;
     if (model === null || running) return;
     const id = nextTurnId.current++;
-    const snapshot = draftRef.current;
+    const snapshot = todosRef.current;
     const controller = new AbortController();
     abortRef.current = controller;
     setRunning(true);
     setTurns((ts) => [
       ...ts,
-      { id, request, status: 'running', attempts: [], changes: [], message: undefined },
+      { id, request, status: 'running', reply: '', calls: [], rejected: [] },
     ]);
 
+    let reply: string;
+    let applied: readonly Call[] = [];
     try {
-      const result = await runCopilot<Campaign>({
-        schema: campaignSchema,
-        promptSchema,
-        decoderSchema,
-        crossFieldRules: CROSS_FIELD_RULES,
-        current: snapshot as Campaign,
+      const result = await runAssistant({
+        state: snapshot,
+        history: historyRef.current,
         request,
         model,
-        today: localToday(),
         signal: controller.signal,
         onEvent: (event) => {
-          switch (event.kind) {
-            case 'attempt':
-              updateTurn(id, (t) => ({
-                ...t,
-                attempts: [...t.attempts, { n: event.attempt, text: '', errors: undefined }],
-              }));
-              break;
-            case 'text':
-              updateTurn(id, (t) => ({
-                ...t,
-                attempts: t.attempts.map((a) =>
-                  a.n === event.attempt ? { ...a, text: event.text } : a,
-                ),
-              }));
-              break;
-            case 'rejected':
-              updateTurn(id, (t) => ({
-                ...t,
-                attempts: t.attempts.map((a) =>
-                  a.n === event.attempt ? { ...a, errors: event.errors } : a,
-                ),
-              }));
-              break;
-            case 'applied':
-              break;
+          if (event.kind === 'attempt') updateTurn(id, (t) => ({ ...t, reply: '' }));
+          if (event.kind === 'text')
+            updateTurn(id, (t) => ({ ...t, reply: partialReply(event.text) }));
+          if (event.kind === 'rejected') {
+            updateTurn(id, (t) => ({
+              ...t,
+              rejected: [...t.rejected, { attempt: event.attempt, errors: event.errors }],
+            }));
           }
         },
       });
 
       switch (result.status) {
-        case 'applied':
-          if (draftRef.current !== snapshot) {
-            // Someone edited the form while the model worked; don't overwrite their edit.
-            updateTurn(id, (t) => ({
-              ...t,
-              status: 'failed',
-              message:
-                "The form changed while the model was working, so this result wasn't applied. Ask again.",
-            }));
+        case 'done':
+          if (todosRef.current !== snapshot && result.calls.length > 0) {
+            // The list changed while the model worked; don't overwrite that edit.
+            reply =
+              "Your list changed while I was working, so I didn't make those changes. Please ask again.";
+            updateTurn(id, (t) => ({ ...t, status: 'failed', reply }));
             break;
           }
-          setHistory((h) => [...h, snapshot]);
-          commitDraft(result.config);
-          setChanged(changedPrefixes(result.changes));
-          setChangeRevision((r) => r + 1);
-          setTab('form');
-          updateTurn(id, (t) => ({ ...t, status: 'applied', changes: result.changes }));
-          break;
-        case 'unchanged':
-          updateTurn(id, (t) => ({
-            ...t,
-            status: 'unchanged',
-            message: 'The model returned the same configuration.',
-          }));
+          reply = result.reply;
+          applied = result.calls;
+          commit(result.state);
+          setHighlight(touchedIds(snapshot, result.state));
+          updateTurn(id, (t) => ({ ...t, status: 'done', reply, calls: result.calls }));
           break;
         case 'failed':
-          updateTurn(id, (t) => ({
-            ...t,
-            status: 'failed',
-            message: `Still invalid after ${result.attempts} attempts, so nothing was applied.`,
-          }));
+          reply = `Sorry, I couldn't do that without breaking a rule, so I didn't change anything. (${result.errors.join('; ')})`;
+          updateTurn(id, (t) => ({ ...t, status: 'failed', reply }));
           break;
         case 'aborted':
-          updateTurn(id, (t) => ({ ...t, status: 'aborted' }));
+          reply = 'Stopped. Nothing was changed.';
+          updateTurn(id, (t) => ({ ...t, status: 'aborted', reply }));
           break;
       }
     } catch (error: unknown) {
-      updateTurn(id, (t) => ({ ...t, status: 'error', message: errorMessage(error) }));
+      reply = `Something went wrong: ${errorMessage(error)}`;
+      updateTurn(id, (t) => ({ ...t, status: 'error', reply }));
     } finally {
       abortRef.current = null;
       setRunning(false);
     }
-  }
-
-  function undo(): void {
-    const previous = history.at(-1);
-    if (previous === undefined) return;
-    setHistory((h) => h.slice(0, -1));
-    commitDraft(previous);
-    setChanged(new Set());
+    // History records what actually happened, in the same shape the model answers in,
+    // so a follow-up like "change that back" can see the calls it refers to.
+    historyRef.current = [
+      ...historyRef.current,
+      { role: 'user', content: request },
+      { role: 'assistant', content: JSON.stringify({ calls: applied, reply }) },
+    ];
   }
 
   function reset(): void {
-    setHistory([]);
-    commitDraft(defaultCampaign);
-    setChanged(new Set());
+    commit(initialState);
+    setHighlight(new Set());
+    setTurns([]);
+    historyRef.current = [];
   }
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-6 py-4">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-6 py-3">
         <div>
-          <h1 className="text-lg font-semibold">Schema Copilot</h1>
+          <h1 className="text-base font-semibold">TodoMVC + Todo Assistant</h1>
           <p className="text-sm text-muted-foreground">
-            One Zod schema generates the form, constrains the model, and validates every edit.
+            One Zod schema defines the tools, constrains the model, and validates every change, from
+            you or the AI.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={valid ? 'success' : 'destructive'}>
-            {valid ? 'Valid' : `${errors.size} ${errors.size === 1 ? 'error' : 'errors'}`}
-          </Badge>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={undo}
-            disabled={history.length === 0 || running}
-          >
-            Undo AI change
-          </Button>
-          <Button size="sm" variant="ghost" onClick={reset} disabled={running}>
-            Reset
-          </Button>
-        </div>
+        <button
+          type="button"
+          onClick={reset}
+          disabled={running}
+          className="rounded-md px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
+        >
+          Reset
+        </button>
       </header>
 
-      <main className="grid min-h-0 flex-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_440px]">
-        <Card className="flex min-h-0 flex-col">
-          <div className="flex gap-1 border-b border-border p-2" role="tablist">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                role="tab"
-                type="button"
-                aria-selected={tab === t.id}
-                onClick={() => setTab(t.id)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-sm',
-                  tab === t.id ? 'bg-muted font-medium' : 'text-muted-foreground hover:bg-muted/60',
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
+      <main className="grid min-h-0 flex-1 gap-6 overflow-y-auto p-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:overflow-hidden">
+        <div className="lg:overflow-y-auto">
+          <div className="mx-auto w-full max-w-[550px] pb-10">
+            <TodoApp state={todos} dispatch={dispatch} highlight={highlight} disabled={running} />
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-5">
-            {tab === 'form' && (
-              <div
-                className={cn('transition-opacity', running && 'pointer-events-none opacity-60')}
-                aria-busy={running}
-              >
-                {errors.has('') && (
-                  <p className="mb-4 rounded-md bg-destructive-soft p-3 text-sm text-destructive">
-                    {errors.get('')}
-                  </p>
-                )}
-                <SchemaForm
-                  fields={fields}
-                  value={draft}
-                  onChange={onFieldChange}
-                  errors={errors}
-                  changed={changed}
-                  changeRevision={changeRevision}
-                />
-              </div>
-            )}
-            {tab !== 'form' && (
-              <>
-                <p className="mb-3 text-sm text-muted-foreground">
-                  {tab === 'schema' &&
-                    'Generated by z.toJSONSchema(). The model sees this in its prompt.'}
-                  {tab === 'decoder' &&
-                    'The structural subset that constrains decoding: types, enums, required keys. Ranges, patterns and cross-field rules are enforced by Zod after generation.'}
-                  {tab === 'json' && 'The live configuration, edited by the form and by the model.'}
-                </p>
-                <pre className="overflow-auto rounded-md bg-muted p-4 font-mono text-xs leading-relaxed">
-                  {JSON.stringify(
-                    tab === 'schema' ? promptSchema : tab === 'decoder' ? decoderSchema : draft,
-                    null,
-                    2,
-                  )}
-                </pre>
-              </>
-            )}
-          </div>
-        </Card>
-
-        <div className="min-h-[560px] lg:min-h-0">
+        </div>
+        <div className="min-h-[520px] lg:min-h-0">
           <ChatPanel
             engine={engine}
             webgpu={webgpu}

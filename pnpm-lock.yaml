@@ -23,6 +23,9 @@ importers:
       tailwind-merge:
         specifier: ^3.7.0
         version: 3.7.0
+      todomvc-app-css:
+        specifier: 2.4.3
+        version: 2.4.3
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -2302,6 +2305,10 @@ packages:
     resolution: {integrity: sha512-u8KszXvGfU68hVcZpRHKG28T0krMuv2G5nDhiHaMLen/gIuFEgIJhaJuO69qjnXg5paSrbPMFfx3brNuN8eVSg==}
     engines: {node: '>=14.0.0'}
 
+  todomvc-app-css@2.4.3:
+    resolution: {integrity: sha512-mSnWZaKBWj9aQcFRsGguY/a8O8NR8GmecD48yU1rzwNemgZa/INLpIsxxMiToFGVth+uEKBrQ7IhWkaXZxwq5Q==}
+    engines: {node: '>=4'}
+
   totalist@3.0.1:
     resolution: {integrity: sha512-sf4i37nQ2LBx4m3wB74y+ubopq6W/dIzXg0FDGjsYnZHVa1Da8FH853wlL2gtUhg+xJXjfk3kUZS3BRoQeoQBQ==}
     engines: {node: '>=6'}
@@ -4228,6 +4235,8 @@ snapshots:
   tinyrainbow@3.1.1: {}
 
   tinyspy@4.0.6: {}
+
+  todomvc-app-css@2.4.3: {}
 
   totalist@3.0.1: {}
 

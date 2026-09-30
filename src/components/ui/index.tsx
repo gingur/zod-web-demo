@@ -2,7 +2,6 @@ import {
   forwardRef,
   type ButtonHTMLAttributes,
   type HTMLAttributes,
-  type InputHTMLAttributes,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react';
@@ -52,13 +51,6 @@ const fieldClass =
   'focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent disabled:opacity-50 ' +
   'aria-invalid:border-destructive aria-invalid:outline-destructive';
 
-export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
-  ({ className, ...props }, ref) => (
-    <input ref={ref} className={cn(fieldClass, 'h-9', className)} {...props} />
-  ),
-);
-Input.displayName = 'Input';
-
 export const Textarea = forwardRef<
   HTMLTextAreaElement,
   TextareaHTMLAttributes<HTMLTextAreaElement>
@@ -78,48 +70,6 @@ export const NativeSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<H
 );
 NativeSelect.displayName = 'NativeSelect';
 
-export function Label({
-  className,
-  ...props
-}: HTMLAttributes<HTMLLabelElement> & { htmlFor?: string }) {
-  return <label className={cn('text-sm font-medium leading-none', className)} {...props} />;
-}
-
-export function Switch({
-  checked,
-  onCheckedChange,
-  id,
-  ...rest
-}: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  id?: string;
-  'aria-label'?: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      id={id}
-      aria-checked={checked}
-      aria-label={rest['aria-label']}
-      onClick={() => onCheckedChange(!checked)}
-      className={cn(
-        'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
-        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-        checked ? 'bg-accent' : 'bg-border',
-      )}
-    >
-      <span
-        className={cn(
-          'inline-block h-4 w-4 rounded-full bg-white shadow transition-transform',
-          checked ? 'translate-x-4.5' : 'translate-x-0.5',
-        )}
-      />
-    </button>
-  );
-}
-
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
@@ -127,22 +77,6 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
       {...props}
     />
   );
-}
-
-export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex flex-col gap-1 px-5 pt-5', className)} {...props} />;
-}
-
-export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return <h3 className={cn('text-base font-semibold leading-none', className)} {...props} />;
-}
-
-export function CardDescription({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn('text-sm text-muted-foreground', className)} {...props} />;
-}
-
-export function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('px-5 pb-5 pt-4', className)} {...props} />;
 }
 
 type BadgeVariant = 'default' | 'outline' | 'success' | 'destructive' | 'warning';

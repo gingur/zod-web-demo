@@ -3,7 +3,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { App } from './App';
 
 const meta = {
-  title: 'App/Schema Copilot',
+  title: 'App/Todo Assistant',
   component: App,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof App>;
@@ -11,48 +11,47 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const titles = (canvas: ReturnType<typeof within>) =>
+  canvas.queryAllByTestId('todo').map((li: HTMLElement) => li.textContent);
+
 export const Idle: Story = {};
 
 /**
- * The end-to-end path the live demo takes, with the scripted model: the first
- * attempt breaks a cross-field rule, Zod rejects it, the model corrects it, and
- * only then does the form change.
+ * The path the live demo takes, with the scripted model: the first attempt
+ * guesses an id, the tool rejects it, the model corrects it, and only then
+ * does the list change. The reply is text either way.
  */
 export const RejectsThenApplies: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Use scripted mode instead' }));
-    await userEvent.click(canvas.getByRole('button', { name: /Run this on mobile only/ }));
+    await userEvent.click(canvas.getByRole('button', { name: /Add eggs and bread/ }));
 
     await expect(
-      await canvas.findByText(/Rejected by Zod/, {}, { timeout: 10_000 }),
-    ).toBeInTheDocument();
+      await canvas.findByText(/Attempt 1 rejected by Zod/, {}, { timeout: 10_000 }),
+    ).toHaveTextContent('There is no todo with id "buy-milk"');
     await expect(
-      await canvas.findByText('Applied after 2 attempts', {}, { timeout: 10_000 }),
+      await canvas.findByText(
+        "Added eggs and bread, and marked 'Buy milk' as done.",
+        {},
+        { timeout: 10_000 },
+      ),
     ).toBeInTheDocument();
-
-    await expect(canvas.getByLabelText('Discount code')).toHaveValue('SAVE15');
-    await expect(canvas.getByLabelText('Trigger')).toHaveValue('time_on_page');
-    await expect(canvas.getByText('Valid')).toBeInTheDocument();
-
-    await userEvent.click(canvas.getByRole('button', { name: 'Undo AI change' }));
-    await expect(canvas.getByLabelText('Discount code')).toHaveValue('WELCOME10');
+    await expect(await canvas.findByText('✓ toggle_todo')).toBeInTheDocument();
+    await expect(titles(canvas)).toEqual(['Buy milk', 'Walk the dog', 'Call mom', 'Eggs', 'Bread']);
+    await expect(canvas.getByLabelText('Toggle Buy milk')).toBeChecked();
   },
 };
 
-export const NumericRuleRecovers: Story = {
+export const RefusesOffTopic: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Use scripted mode instead' }));
-    await userEvent.click(canvas.getByRole('button', { name: /visitors from Instagram/ }));
+    await userEvent.click(canvas.getByRole('button', { name: /poem about cats/ }));
     await expect(
-      await canvas.findByText(/greater_than needs a number/, {}, { timeout: 10_000 }),
+      await canvas.findByText(/I can only help with your todo list/, {}, { timeout: 10_000 }),
     ).toBeInTheDocument();
-    await expect(
-      await canvas.findByText('Applied after 2 attempts', {}, { timeout: 10_000 }),
-    ).toBeInTheDocument();
-    await expect(
-      canvas.getAllByLabelText('Value').map((el) => (el as HTMLInputElement).value),
-    ).toEqual(['instagram', '50']);
+    await expect(canvas.queryByText(/✓/)).toBeNull();
+    await expect(titles(canvas)).toEqual(['Buy milk', 'Walk the dog', 'Call mom']);
   },
 };

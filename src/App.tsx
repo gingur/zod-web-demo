@@ -133,7 +133,7 @@ export function App() {
           break;
         case 'failed':
           status = 'failed';
-          reply = `Sorry, I couldn't do that without breaking a rule, so I didn't change anything. (${result.errors.join('; ')})`;
+          reply = `Sorry, I couldn't finish that, so I didn't change anything. Please try again. (${result.errors.join('; ')})`;
           break;
         case 'aborted':
           status = 'aborted';

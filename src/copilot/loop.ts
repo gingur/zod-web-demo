@@ -22,6 +22,15 @@ export interface ModelClient {
   generate(request: GenerateRequest): Promise<string>;
 }
 
+/**
+ * Thrown by a model client when a generation failed for a reason that is not
+ * the model's answer, such that drawing again can succeed. The loop spends an
+ * attempt on it but sends the model no feedback, since there is nothing to fix.
+ */
+export class ResampleError extends Error {
+  override name = 'ResampleError';
+}
+
 /** The structural subset of `replySchema` that constrains decoding. */
 export const decoderSchema = toDecoderSchema(toJsonSchema(replySchema));
 
@@ -88,7 +97,9 @@ export async function runAssistant(options: RunAssistantOptions): Promise<Assist
       });
     } catch (error: unknown) {
       if (isAbort(error, signal)) return { status: 'aborted', attempts: attempt };
-      throw error;
+      if (!(error instanceof ResampleError)) throw error;
+      lastErrors = [error.message];
+      continue;
     }
     if (signal?.aborted) return { status: 'aborted', attempts: attempt };
 

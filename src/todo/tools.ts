@@ -45,13 +45,11 @@ export function applyCall(state: TodoState, input: Call): CallResult {
       const { id, title } = call.arguments;
       return withTodos(state.todos.map((t) => (t.id === id ? { ...t, title } : t)));
     }
-    case 'toggle_todo':
-      return withTodos(
-        state.todos.map((t) =>
-          t.id === call.arguments.id ? { ...t, completed: !t.completed } : t,
-        ),
-      );
-    case 'toggle_all':
+    case 'mark_todo': {
+      const { id, completed } = call.arguments;
+      return withTodos(state.todos.map((t) => (t.id === id ? { ...t, completed } : t)));
+    }
+    case 'mark_all':
       return withTodos(state.todos.map((t) => ({ ...t, completed: call.arguments.completed })));
     case 'delete_todo':
       return withTodos(state.todos.filter((t) => t.id !== call.arguments.id));

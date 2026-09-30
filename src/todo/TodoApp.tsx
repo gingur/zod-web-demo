@@ -59,7 +59,7 @@ export function TodoApp({ state, dispatch, highlight, disabled = false }: TodoAp
             type="checkbox"
             checked={left === 0}
             disabled={disabled}
-            onChange={() => dispatch({ name: 'toggle_all', arguments: { completed: left > 0 } })}
+            onChange={() => dispatch({ name: 'mark_all', arguments: { completed: left > 0 } })}
           />
           <label htmlFor="toggle-all">Mark all as complete</label>
           <ul className="todo-list">
@@ -79,7 +79,12 @@ export function TodoApp({ state, dispatch, highlight, disabled = false }: TodoAp
                       aria-label={`Toggle ${todo.title}`}
                       checked={todo.completed}
                       disabled={disabled}
-                      onChange={() => dispatch({ name: 'toggle_todo', arguments: { id: todo.id } })}
+                      onChange={() =>
+                        dispatch({
+                          name: 'mark_todo',
+                          arguments: { id: todo.id, completed: !todo.completed },
+                        })
+                      }
                     />
                     <label
                       onDoubleClick={() =>

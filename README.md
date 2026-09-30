@@ -6,13 +6,13 @@ TodoMVC with a chat assistant that runs in the browser. Zod defines the tools, t
 
 ## How it works
 
-1. `src/todo/schema.ts` defines seven tools, one per TodoMVC action: add, edit, toggle, toggle all, delete, clear completed, and filter. Each is a name, a description, and a Zod object for its arguments with a `.describe()` on every field. The assistant can do what the UI can do, and nothing else.
+1. `src/todo/schema.ts` defines seven tools, one per TodoMVC action: add, edit, mark done or not, mark all, delete, clear completed, and filter. Marking sets a state rather than flipping it, so repeating a call is harmless. Each is a name, a description, and a Zod object for its arguments with a `.describe()` on every field. The assistant can do what the UI can do, and nothing else.
 2. The UI's own controls dispatch those same tool calls through `src/todo/tools.ts`, so a click and a model call are checked the same way.
 3. The model runs in the browser through [WebLLM](https://github.com/mlc-ai/web-llm) in a Web Worker. It reads the tools as definitions generated from Zod, in the `<tools>` format its chat template uses, and the todo context as JSON with its schema (`src/copilot/prompt.ts`).
-4. Each turn, the model plans (`src/copilot/pipeline.ts`): it returns `{ intent, calls }`, where intent is `change`, `question` or `off_topic`, with decoding constrained to that shape. Zod and the tools check what the decoder can't, such as an id that doesn't exist or an intent that disagrees with its calls. Calls are applied all or nothing, and failures go back to the model, up to 3 attempts (`src/copilot/loop.ts`).
-5. The reply depends on the intent. A change is reported as the facts of what happened, written by code, so it is always true. An off-topic request gets a fixed decline. Only a question is answered in the model's own words, given the list and its counts.
+4. Each turn, the model plans (`src/copilot/pipeline.ts`): it returns `{ intent, calls }`, where intent is `change_list`, `about_list` or `off_topic`, with decoding constrained to that shape. Zod and the tools check what the decoder can't, such as an id that doesn't exist or an intent that disagrees with its calls. Calls are applied all or nothing, and failures go back to the model, up to 3 attempts (`src/copilot/loop.ts`).
+5. The reply depends on the intent. A change is reported as the facts of what happened, written by code, so it is always true. An off-topic request gets a fixed decline. Only an `about_list` request is answered in the model's own words, given the list and its counts.
 
-The split is measured, not assumed: on the same 20 prompts with Qwen2.5 3B, a single pass that planned and replied in one go misreported changes it made or didn't make; planning with the model and reporting with code got 17–18 of 20 right with every reply true.
+The split is measured, not assumed: on the same 20 prompts with Qwen2.5 3B, a single pass that planned and replied in one go misreported changes it made or didn't make; planning with the model and reporting with code got 17–19 of 20 right with every reply true. Reading the full prompt the model receives (tools, examples, special tokens) found the rest: worked examples that skipped some tools, intent labels the model read by name, and a toggle tool that un-did already-finished todos.
 
 Scripted mode replays the suggested prompts through the same pipeline without a model, for browsers without WebGPU. One of them deliberately guesses a wrong id first, so the rejection and retry show on stage.
 

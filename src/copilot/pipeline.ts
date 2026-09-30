@@ -63,23 +63,46 @@ function plannerSystem(): string {
   ].join('\n');
 }
 
+/**
+ * Worked examples. Between them they use every tool and every intent: a
+ * small model reaches for the tools it has seen used, so a tool missing here
+ * was a tool the planner avoided (e.g. "uncheck all" became one call for one todo).
+ */
 const PLAN_EXAMPLES: readonly { request: string; plan: Plan }[] = [
   {
     request: 'add apples and pears, and tick off pay rent',
     plan: {
-      intent: 'change',
+      intent: 'change_list',
       calls: [
         { name: 'add_todo', arguments: { title: 'Apples' } },
         { name: 'add_todo', arguments: { title: 'Pears' } },
-        { name: 'toggle_todo', arguments: { id: 't1' } },
+        { name: 'mark_todo', arguments: { id: 't1', completed: true } },
       ],
     },
   },
-  { request: 'how many are left?', plan: { intent: 'question', calls: [] } },
+  { request: 'how many are left?', plan: { intent: 'about_list', calls: [] } },
+  {
+    request: 'rename pay rent to pay rent by friday, and delete book dentist',
+    plan: {
+      intent: 'change_list',
+      calls: [
+        { name: 'edit_todo', arguments: { id: 't1', title: 'Pay rent by Friday' } },
+        { name: 'delete_todo', arguments: { id: 't2' } },
+      ],
+    },
+  },
+  { request: 'which things can you help me with?', plan: { intent: 'about_list', calls: [] } },
+  {
+    request: 'mark every one as not done',
+    plan: {
+      intent: 'change_list',
+      calls: [{ name: 'mark_all', arguments: { completed: false } }],
+    },
+  },
   {
     request: "clear the done ones and show me what's left",
     plan: {
-      intent: 'change',
+      intent: 'change_list',
       calls: [
         { name: 'clear_completed', arguments: {} },
         { name: 'set_filter', arguments: { filter: 'active' } },
@@ -87,7 +110,7 @@ const PLAN_EXAMPLES: readonly { request: string; plan: Plan }[] = [
     },
   },
   { request: 'tell me a joke', plan: { intent: 'off_topic', calls: [] } },
-  { request: 'thanks!', plan: { intent: 'question', calls: [] } },
+  { request: 'thanks!', plan: { intent: 'about_list', calls: [] } },
 ];
 
 /**
@@ -144,13 +167,17 @@ export function describeCalls(before: TodoState, calls: readonly Call[]): string
       case 'edit_todo':
         lines.push(`Renamed ${title(call.arguments.id)} to '${call.arguments.title.trim()}'.`);
         break;
-      case 'toggle_todo': {
-        const done = state.todos.find((t) => t.id === call.arguments.id)?.completed;
-        lines.push(`Marked ${title(call.arguments.id)} as ${done ? 'active' : 'done'}.`);
+      case 'mark_todo': {
+        const { id, completed } = call.arguments;
+        const already = state.todos.find((t) => t.id === id)?.completed === completed;
+        const status = completed ? 'done' : 'not done';
+        lines.push(
+          already ? `${title(id)} was already ${status}.` : `Marked ${title(id)} as ${status}.`,
+        );
         break;
       }
-      case 'toggle_all':
-        lines.push(`Marked every todo as ${call.arguments.completed ? 'done' : 'active'}.`);
+      case 'mark_all':
+        lines.push(`Marked every todo as ${call.arguments.completed ? 'done' : 'not done'}.`);
         break;
       case 'delete_todo':
         lines.push(`Deleted ${title(call.arguments.id)}.`);
@@ -280,7 +307,7 @@ export async function runPipeline(options: RunPipelineOptions): Promise<TurnResu
     attempts: plan.attempts,
   });
 
-  if (intent === 'change') {
+  if (intent === 'change_list') {
     const changes = describeCalls(state, calls);
     return done(changes.join(' '), changes);
   }

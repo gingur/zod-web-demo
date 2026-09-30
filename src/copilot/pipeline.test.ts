@@ -34,17 +34,17 @@ describe('runPipeline', () => {
   test('a change is applied and the reply is the facts, written by code', async () => {
     const { model, requests } = sequenceModel([
       plan({
-        intent: 'change',
+        intent: 'change_list',
         calls: [
           { name: 'add_todo', arguments: { title: 'Eggs' } },
-          { name: 'toggle_todo', arguments: { id: 't1' } },
+          { name: 'mark_todo', arguments: { id: 't1', completed: true } },
         ],
       }),
     ]);
     const result = await runPipeline({ ...base, model });
     expect(result).toMatchObject({
       status: 'done',
-      intent: 'change',
+      intent: 'change_list',
       reply: "Added 'Eggs'. Marked 'Buy milk' as done.",
       changes: ["Added 'Eggs'.", "Marked 'Buy milk' as done."],
     });
@@ -64,13 +64,13 @@ describe('runPipeline', () => {
   test('a question is answered in free text by a second, unconstrained pass', async () => {
     const texts: string[] = [];
     const { model, requests } = sequenceModel([
-      plan({ intent: 'question', calls: [] }),
+      plan({ intent: 'about_list', calls: [] }),
       'You have 2 todos left.',
     ]);
     const result = await runPipeline({ ...base, model, onReplyText: (t) => texts.push(t) });
     expect(result).toMatchObject({
       status: 'done',
-      intent: 'question',
+      intent: 'about_list',
       reply: 'You have 2 todos left.',
     });
     expect(result.status === 'done' && result.state).toBe(initialState);
@@ -84,30 +84,30 @@ describe('runPipeline', () => {
   test('an intent that disagrees with its calls is sent back', async () => {
     const { model, requests } = sequenceModel([
       plan({
-        intent: 'question',
-        calls: [{ name: 'toggle_all', arguments: { completed: false } }],
+        intent: 'about_list',
+        calls: [{ name: 'mark_all', arguments: { completed: false } }],
       }),
-      plan({ intent: 'question', calls: [] }),
+      plan({ intent: 'about_list', calls: [] }),
       'Here is your list.',
     ]);
     const result = await runPipeline({ ...base, model });
     expect(result.status).toBe('done');
     expect(requests[1]?.messages.at(-1)?.content).toContain(
-      'A question request changes nothing; leave calls empty.',
+      'Intent about_list changes nothing; leave calls empty.',
     );
   });
 
   test('a failing call is sent back, and nothing is applied until the retry passes', async () => {
     const bad = plan({
-      intent: 'change',
+      intent: 'change_list',
       calls: [
         { name: 'add_todo', arguments: { title: 'Eggs' } },
-        { name: 'toggle_todo', arguments: { id: 'milk' } },
+        { name: 'mark_todo', arguments: { id: 'milk', completed: true } },
       ],
     });
     const good = plan({
-      intent: 'change',
-      calls: [{ name: 'toggle_todo', arguments: { id: 't1' } }],
+      intent: 'change_list',
+      calls: [{ name: 'mark_todo', arguments: { id: 't1', completed: true } }],
     });
     const { model, requests } = sequenceModel([bad, good]);
     const events: AssistantEvent[] = [];
@@ -120,7 +120,7 @@ describe('runPipeline', () => {
       'attempt',
     ]);
     const feedback = requests[1]?.messages.at(-1)?.content ?? '';
-    expect(feedback).toContain('calls.1 (toggle_todo): There is no todo with id "milk"');
+    expect(feedback).toContain('calls.1 (mark_todo): There is no todo with id "milk"');
     expect(requests[1]?.messages.at(-2)).toEqual({ role: 'assistant', content: bad });
     // The rejected batch's add_todo never happened.
     expect(result.status === 'done' && result.state.todos.map((t) => t.title)).not.toContain(
@@ -139,7 +139,7 @@ describe('runPipeline', () => {
 
   test('gives up after the attempt budget with the last errors', async () => {
     const bad = plan({
-      intent: 'change',
+      intent: 'change_list',
       calls: [{ name: 'delete_todo', arguments: { id: 'nope' } }],
     });
     const { model } = sequenceModel([bad, bad]);
@@ -179,7 +179,7 @@ describe('runPipeline', () => {
     const history: PastTurn[] = [
       {
         request: 'rename call mom',
-        intent: 'change',
+        intent: 'change_list',
         calls: [{ name: 'edit_todo', arguments: { id: 't3', title: 'Call dad' } }],
         changes: ["Renamed 'Call mom' to 'Call dad'."],
         reply: "Renamed 'Call mom' to 'Call dad'.",
@@ -199,7 +199,7 @@ describe('describeCalls', () => {
       describeCalls(initialState, [
         { name: 'edit_todo', arguments: { id: 't3', title: 'Call dad' } },
         { name: 'delete_todo', arguments: { id: 't2' } },
-        { name: 'toggle_todo', arguments: { id: 't1' } },
+        { name: 'mark_todo', arguments: { id: 't1', completed: true } },
         { name: 'set_filter', arguments: { filter: 'active' } },
       ]),
     ).toEqual([
@@ -288,10 +288,8 @@ describe('scripted model', () => {
       request: 'Add eggs and bread, and mark buy milk as done.',
       model: createScriptedModel(10_000, 0),
     });
-    expect(result.status === 'done' && result.calls.map((c) => c.name)).toEqual([
-      'add_todo',
-      'add_todo',
-    ]);
+    // mark_todo sets rather than flips, so repeating it is harmless, and the facts say so.
     expect(result.status === 'done' && result.state.todos[0]?.completed).toBe(true);
+    expect(result.status === 'done' && result.reply).toContain("'Buy milk' was already done.");
   });
 });

@@ -37,7 +37,7 @@ export const RejectsThenApplies: Story = {
         { timeout: 10_000 },
       ),
     ).toBeInTheDocument();
-    await expect(await canvas.findByText('✓ toggle_todo')).toBeInTheDocument();
+    await expect(await canvas.findByText('✓ mark_todo')).toBeInTheDocument();
     await expect(titles(canvas)).toEqual(['Buy milk', 'Walk the dog', 'Call mom', 'Eggs', 'Bread']);
     await expect(canvas.getByLabelText('Toggle Buy milk')).toBeChecked();
   },

@@ -24,8 +24,11 @@ CI runs devkit's `toolchain.verify` with `test: 'test:ci'`, which installs Chrom
 - Capabilities are exactly TodoMVC's. Every UI action is a tool, and the assistant has no tool the UI lacks. Don't add one without adding the UI for it.
 - Zod is the only definition of every shape the model sees or returns: tools, todo context, responses. Each gives the type (`z.infer`), the JSON Schema the model reads (`z.toJSONSchema`), and the validation. Every tool argument has a `.describe()` (a test enforces it); don't restate tools or fields in prompt prose.
 - UI and model changes both go through `applyCall`/`applyCalls`. The model never writes to the list directly: a whole batch is validated and applied, or nothing is, and it's discarded if the list changed while the model ran.
-- The model plans; code reports. A change's reply is `describeCalls` output, never model prose, because the 3B model misstated changes it was told about. Only `question` turns get model-written text.
+- The model plans; code reports. A change's reply is `describeCalls` output, never model prose, because the 3B model misstated changes it was told about. Only `about_list` turns get model-written text.
 - Deleting is always explicit (`delete_todo`). `edit_todo` rejects an empty title even though TodoMVC's editor deletes on empty; the editor sends `delete_todo` instead.
+- Tools set state; they never flip it (`mark_todo`/`mark_all` take `completed`). A toggle made the model read each todo's state first, and "cross off" un-did a finished todo.
+- The planner's worked examples use every tool and every intent. A small model avoids tools it hasn't seen used, and reads names literally (intent labels included), so keep names self-explanatory and describe fields in the user's own words ("check off", "uncheck").
+- To see what the model really receives, read WebLLM's rendered prompt back from the engine, not the messages array: run it on the main thread with `CreateMLCEngine` and call `pipeline.conversation.getPromptArray(pipeline.config)` after a completion.
 - Todo titles reach the model as data, labelled as such, never as instructions.
 - Behavior changes need a unit test or a story with a `play` function. Stories are tests here (`tags: ['test']` in `.storybook/preview.ts`).
 - Asset paths stay relative (`base: './'`) so Pages' `/zod-web-demo/` subpath works.

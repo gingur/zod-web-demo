@@ -18,11 +18,11 @@ export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
     plan: [
       // First attempt guesses an id instead of copying it; the tool rejects it.
       () => ({
-        intent: 'change',
+        intent: 'change_list',
         calls: [
           { name: 'add_todo', arguments: { title: 'Eggs' } },
           { name: 'add_todo', arguments: { title: 'Bread' } },
-          { name: 'toggle_todo', arguments: { id: 'buy-milk' } },
+          { name: 'mark_todo', arguments: { id: 'buy-milk', completed: true } },
         ],
       }),
       (todos) => {
@@ -31,11 +31,10 @@ export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
           { name: 'add_todo', arguments: { title: 'Eggs' } },
           { name: 'add_todo', arguments: { title: 'Bread' } },
         ];
-        // toggle_todo flips, so only call it when there is something to mark done.
-        if (milk !== undefined && !milk.completed) {
-          calls.push({ name: 'toggle_todo', arguments: { id: milk.id } });
+        if (milk !== undefined) {
+          calls.push({ name: 'mark_todo', arguments: { id: milk.id, completed: true } });
         }
-        return { intent: 'change', calls };
+        return { intent: 'change_list', calls };
       },
     ],
   },
@@ -44,7 +43,7 @@ export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
     plan: [
       // Annotated: without it, `{}` and `{ filter }` widen into an invalid union.
       (): Plan => ({
-        intent: 'change',
+        intent: 'change_list',
         calls: [
           { name: 'clear_completed', arguments: {} },
           { name: 'set_filter', arguments: { filter: 'active' } },
@@ -54,7 +53,7 @@ export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
   },
   {
     text: 'What can you do?',
-    plan: [() => ({ intent: 'question', calls: [] })],
+    plan: [() => ({ intent: 'about_list', calls: [] })],
     answer:
       'I can add, rename, complete and delete todos, clear the completed ones, and filter the list. What would you like to do?',
   },
@@ -114,7 +113,7 @@ export function createScriptedModel(charsPerTick = 6, tickMs = 16): ModelClient 
       let text: string;
       if (decoderSchema !== undefined) {
         const planner = prompt?.plan[Math.min(attempt, prompt.plan.length - 1)];
-        text = JSON.stringify(planner?.(todos) ?? { intent: 'question', calls: [] }, null, 2);
+        text = JSON.stringify(planner?.(todos) ?? { intent: 'about_list', calls: [] }, null, 2);
       } else {
         text =
           prompt?.answer ??

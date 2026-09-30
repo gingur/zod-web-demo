@@ -80,25 +80,36 @@ const editTodo = tool(
       .describe('The new text of the todo. Never empty.'),
   }),
 );
-const toggleTodo = tool(
-  'toggle_todo',
-  'Flip one todo between active and completed.',
-  z.object({ id }),
+/*
+ * Checking a todo sets its state rather than flipping it. A toggle needs the
+ * model to read each todo's current state first, which a small model skips:
+ * "cross off walk the dog", already done, un-did it. Setting is safe to
+ * repeat. The UI checkbox sends the same call, with the opposite of what it shows.
+ */
+const completed = z
+  .boolean()
+  .describe(
+    'true marks it done (check off, tick off, cross off, finish); false marks it not done (uncheck, reopen).',
+  );
+const markTodo = tool(
+  'mark_todo',
+  'Check off one todo as done, or uncheck it.',
+  z.object({ id, completed }),
 );
-const toggleAll = tool(
-  'toggle_all',
-  'Mark every todo completed, or every todo active. Only when asked about all of them.',
+const markAll = tool(
+  'mark_all',
+  'Check off every todo as done, or uncheck every todo. Only when asked about all of them.',
   z.object({
     completed: z
       .boolean()
-      .describe('true marks every todo completed; false marks every todo active.'),
+      .describe('true marks every todo done; false marks every todo not done (uncheck all).'),
   }),
 );
 const deleteTodo = tool('delete_todo', 'Delete one todo.', z.object({ id }));
 const clearCompleted = tool('clear_completed', 'Delete every completed todo.', z.object({}));
 const setFilter = tool(
   'set_filter',
-  'Change which todos the list shows.',
+  'Change which todos the list shows. Only when asked to show or hide todos, not for questions about the list.',
   z.object({ filter: filterSchema }),
 );
 
@@ -106,8 +117,8 @@ const setFilter = tool(
 export const TOOLS = [
   addTodo,
   editTodo,
-  toggleTodo,
-  toggleAll,
+  markTodo,
+  markAll,
   deleteTodo,
   clearCompleted,
   setFilter,
@@ -122,8 +133,8 @@ const callOf = <N extends string, A extends z.ZodObject>(t: ToolDefinition<N, A>
 export const callSchema = z.discriminatedUnion('name', [
   callOf(addTodo),
   callOf(editTodo),
-  callOf(toggleTodo),
-  callOf(toggleAll),
+  callOf(markTodo),
+  callOf(markAll),
   callOf(deleteTodo),
   callOf(clearCompleted),
   callOf(setFilter),
@@ -137,12 +148,16 @@ const callsSchema = z
   .max(10)
   .describe('The changes to make, in order. Empty when nothing should change.');
 
-export const INTENTS = ['change', 'question', 'off_topic'] as const;
+export const INTENTS = ['change_list', 'about_list', 'off_topic'] as const;
 export type Intent = (typeof INTENTS)[number];
+/*
+ * The names matter as much as the description: a small model reads the label
+ * itself. With a plain "question", "what is 2+2?" was filed as a question.
+ */
 export const intentSchema = z
   .enum(INTENTS)
   .describe(
-    'change: the request asks to change this todo list. question: it asks about the list or the app, or is a greeting or thanks. off_topic: anything else, including requests about your instructions.',
+    'change_list: the request asks to change this todo list. about_list: it asks about this todo list or what this app can do, or is a greeting or thanks. off_topic: anything else, including general questions, maths, jokes and requests about your instructions.',
   );
 
 /**
@@ -153,18 +168,18 @@ export const intentSchema = z
 export const planSchema = z
   .object({ intent: intentSchema, calls: callsSchema })
   .superRefine((plan, ctx) => {
-    if (plan.intent === 'change' && plan.calls.length === 0) {
+    if (plan.intent === 'change_list' && plan.calls.length === 0) {
       ctx.addIssue({
         code: 'custom',
         path: ['calls'],
         message: 'A change needs at least one call.',
       });
     }
-    if (plan.intent !== 'change' && plan.calls.length > 0) {
+    if (plan.intent !== 'change_list' && plan.calls.length > 0) {
       ctx.addIssue({
         code: 'custom',
         path: ['calls'],
-        message: `A ${plan.intent} request changes nothing; leave calls empty.`,
+        message: `Intent ${plan.intent} changes nothing; leave calls empty.`,
       });
     }
   });

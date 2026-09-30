@@ -1,5 +1,5 @@
 import type { InitProgressReport, MLCEngineInterface } from '@mlc-ai/web-llm';
-import type { GenerateRequest, ModelClient } from './loop';
+import { ResampleError, type GenerateRequest, type ModelClient } from './loop';
 
 interface ModelOption {
   id: string;
@@ -36,6 +36,17 @@ export function hasWebGPU(): boolean {
 export interface LoadProgress {
   fraction: number;
   text: string;
+}
+
+/**
+ * WebLLM's sampler occasionally emits an out-of-range token id, which the
+ * grammar matcher then rejects: a known upstream bug (mlc-ai/web-llm#807,
+ * mlc-ai/xgrammar#611), random per token and unrelated to the prompt. The
+ * engine releases its lock and resets the matcher on the next request, so
+ * drawing again is safe. The error crosses the worker as a plain message.
+ */
+export function isSamplerGlitch(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('Grammar matcher rejected');
 }
 
 /**
@@ -82,6 +93,13 @@ export async function loadWebLLM(
         }
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         return text;
+      } catch (error: unknown) {
+        if (isSamplerGlitch(error)) {
+          throw new ResampleError('The model hit a known WebLLM sampling glitch.', {
+            cause: error,
+          });
+        }
+        throw error;
       } finally {
         signal?.removeEventListener('abort', onAbort);
       }

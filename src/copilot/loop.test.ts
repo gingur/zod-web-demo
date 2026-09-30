@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { initialState, type AssistantReply } from '@/todo/schema';
 import {
   decoderSchema,
+  ResampleError,
   runAssistant,
   type AssistantEvent,
   type ChatMessage,
@@ -103,6 +104,39 @@ describe('runAssistant', () => {
     const result = await runAssistant({ ...base, model, maxAttempts: 2 });
     expect(result).toMatchObject({ status: 'failed', attempts: 2 });
     expect(result.status === 'failed' && result.errors[0]).toContain('"nope"');
+  });
+
+  test('a failed draw is re-sampled without blaming the model', async () => {
+    const good = json({ calls: [], reply: 'Hi.' });
+    const calls: ChatMessage[][] = [];
+    let first = true;
+    const model: ModelClient = {
+      async generate({ messages }) {
+        calls.push([...messages]);
+        if (first) {
+          first = false;
+          throw new ResampleError('sampler glitch');
+        }
+        return good;
+      },
+    };
+    const events: AssistantEvent[] = [];
+    const result = await runAssistant({ ...base, model, onEvent: (e) => events.push(e) });
+    expect(result).toMatchObject({ status: 'done', reply: 'Hi.', attempts: 2 });
+    // Same prompt both times: no feedback message, and nothing shown as a Zod rejection.
+    expect(calls[1]).toEqual(calls[0]);
+    expect(events.some((e) => e.kind === 'rejected')).toBe(false);
+  });
+
+  test('gives up cleanly when every draw fails', async () => {
+    const model: ModelClient = {
+      async generate() {
+        throw new ResampleError('sampler glitch');
+      },
+    };
+    const result = await runAssistant({ ...base, model, maxAttempts: 2 });
+    expect(result).toMatchObject({ status: 'failed', attempts: 2 });
+    expect(result.status === 'failed' && result.errors[0]).toContain('sampler glitch');
   });
 
   test('stops when aborted', async () => {

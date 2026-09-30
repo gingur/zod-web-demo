@@ -65,7 +65,7 @@ describe('applyCall', () => {
     expect(visible(next).map((t) => t.id)).toEqual(['t1', 't3']);
   });
 
-  test('an unknown id is refused and names the ids that exist', () => {
+  test('an unknown id is refused and tells the model to copy an id from the list', () => {
     for (const tool of ['toggle_todo', 'delete_todo'] as const) {
       const result = applyCall(initialState, { tool, args: { id: 't9' } });
       expect(result).toEqual({

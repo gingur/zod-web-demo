@@ -9,8 +9,8 @@ export interface SuggestedPrompt {
   script: readonly Responder[];
 }
 
-const idOf = (state: TodoState, title: string) =>
-  state.todos.find((t) => t.title.toLowerCase() === title.toLowerCase())?.id;
+const find = (state: TodoState, title: string) =>
+  state.todos.find((t) => t.title.toLowerCase() === title.toLowerCase());
 
 export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
   {
@@ -26,16 +26,19 @@ export const SUGGESTED_PROMPTS: readonly SuggestedPrompt[] = [
         ],
       }),
       (state) => {
-        const id = idOf(state, 'Buy milk');
+        const milk = find(state, 'Buy milk');
+        // toggle_todo flips, so only call it when there is something to mark done.
+        const toggle = milk !== undefined && !milk.completed;
         return {
-          reply:
-            id === undefined
+          reply: toggle
+            ? "Added eggs and bread, and marked 'Buy milk' as done."
+            : milk === undefined
               ? "Added eggs and bread. I couldn't find 'Buy milk' in your list, so I left that part."
-              : "Added eggs and bread, and marked 'Buy milk' as done.",
+              : "Added eggs and bread. 'Buy milk' was already done.",
           calls: [
             { tool: 'add_todo', args: { title: 'Eggs' } },
             { tool: 'add_todo', args: { title: 'Bread' } },
-            ...(id === undefined ? [] : [{ tool: 'toggle_todo' as const, args: { id } }]),
+            ...(toggle ? [{ tool: 'toggle_todo' as const, args: { id: milk.id } }] : []),
           ],
         };
       },

@@ -192,6 +192,25 @@ describe('scripted model', () => {
     });
   }
 
+  test('never un-does a todo that is already done, and says so', async () => {
+    const done = {
+      ...initialState,
+      todos: initialState.todos.map((t) => (t.id === 't1' ? { ...t, completed: true } : t)),
+    };
+    const result = await runAssistant({
+      ...base,
+      state: done,
+      request: 'Add eggs and bread, and mark buy milk as done.',
+      model: createScriptedModel(10_000, 0),
+    });
+    expect(result.status === 'done' && result.calls.map((c) => c.tool)).toEqual([
+      'add_todo',
+      'add_todo',
+    ]);
+    expect(result.status === 'done' && result.reply).toContain('already done');
+    expect(result.status === 'done' && result.state.todos[0]?.completed).toBe(true);
+  });
+
   test('answers anything else politely, without calls', async () => {
     const result = await runAssistant({
       ...base,

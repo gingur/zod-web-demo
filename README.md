@@ -16,6 +16,18 @@ The split is measured, not assumed: on the same 20 prompts with Qwen2.5 3B, a si
 
 Scripted mode replays the suggested prompts through the same pipeline without a model, for browsers without WebGPU. One of them deliberately guesses a wrong id first, so the rejection and retry show on stage.
 
+## WebMCP
+
+The page also offers its tools to agents outside it, through the browser's [WebMCP](https://webmachinelearning.github.io/webmcp/) API (`src/webmcp.ts`). They are the same seven tools, from the same Zod schemas, with the same checks, plus `get_todos` to read the list. A change made this way flashes in the list like an assistant change, and is refused while the in-page assistant is running. A refused call returns the reason, so the agent can fix it.
+
+To try it, use a Chrome or Edge that has WebMCP: the origin trial, or `chrome://flags/#enable-experimental-web-platform-features`. Then, in DevTools on the page:
+
+```js
+const tools = await document.modelContext.getTools();
+const add = tools.find((t) => t.name === 'add_todo');
+await document.modelContext.executeTool(add, JSON.stringify({ title: 'Buy eggs' }));
+```
+
 ## Develop
 
 Toolchain versions live in `.nvmrc` and `packageManager`; `proto install` sets them up.

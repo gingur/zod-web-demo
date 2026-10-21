@@ -16,6 +16,7 @@ CI runs devkit's `toolchain.verify` with `test: 'test:ci'`, which installs Chrom
 - `src/todo/`: the Zod schemas (todo context, the seven tools, the planner's `{ intent, calls }` response, the answer text), the tool reducer, and the TodoMVC component.
 - `src/copilot/`: the pipeline (`pipeline.ts`: plan, apply, reply), the schema-derived prompt pieces (`prompt.ts`: tools, context), the generic validate-and-retry loop (`loop.ts`), the WebLLM client (runs in `worker.ts`), the scripted fallback model, and the chat panel.
 - `src/schema/jsonSchema.ts`: Zod to JSON Schema, and `toDecoderSchema`, which keeps only the structural keywords the decoder needs.
+- `src/webmcp.ts`: registers the same tools with the browser's WebMCP API (`document.modelContext`, falling back to the origin trial's `navigator.modelContext`), plus a read-only `get_todos`, so outside agents can drive the page.
 - `src/components/ui/`: the few shadcn-style primitives the chat panel uses, on Tailwind v4.
 
 ## Rules
@@ -23,6 +24,7 @@ CI runs devkit's `toolchain.verify` with `test: 'test:ci'`, which installs Chrom
 - Keep it simple: this is a demo.
 - Capabilities are exactly TodoMVC's. Every UI action is a tool, and the assistant has no tool the UI lacks. Don't add one without adding the UI for it.
 - Zod is the only definition of every shape the model sees or returns: tools, todo context, responses. Each gives the type (`z.infer`), the JSON Schema the model reads (`z.toJSONSchema`), and the validation. Every tool argument has a `.describe()` (a test enforces it); don't restate tools or fields in prompt prose.
+- WebMCP tools are the chat's tools: built from `TOOLS`, checked by `applyCall`, reported by `describeCalls`. The only extra is `get_todos`, because an outside agent isn't handed the list. A refused call returns `isError: true` with the reason; it doesn't throw, because Chrome keeps a thrown message from the agent.
 - UI and model changes both go through `applyCall`/`applyCalls`. The model never writes to the list directly: a whole batch is validated and applied, or nothing is, and it's discarded if the list changed while the model ran.
 - The model plans; code reports. A change's reply is `describeCalls` output, never model prose, because the 3B model misstated changes it was told about. Only `about_list` turns get model-written text.
 - Deleting is always explicit (`delete_todo`). `edit_todo` rejects an empty title even though TodoMVC's editor deletes on empty; the editor sends `delete_todo` instead.

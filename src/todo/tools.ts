@@ -8,7 +8,7 @@ type BatchResult = { ok: true; state: TodoState } | { ok: false; errors: string[
  * a call is validated the same way whoever makes it. Input is re-parsed with
  * the schema rather than trusted, because it may come straight from a model.
  */
-export function applyCall(state: TodoState, input: Call): CallResult {
+export function applyCall(state: TodoState, input: unknown): CallResult {
   const parsed = callSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues.map((i) => i.message).join('; ') };

@@ -206,7 +206,6 @@ export function App() {
         <div className="lg:overflow-y-auto">
           <div className="mx-auto w-full max-w-[550px] pb-10">
             <TodoApp state={todos} dispatch={dispatch} highlight={highlight} disabled={running} />
-            <p className="mt-4 text-center text-xs text-muted-foreground">{WEBMCP_HINT}</p>
           </div>
         </div>
         <div className="min-h-[520px] lg:min-h-0">
@@ -225,6 +224,11 @@ export function App() {
           />
         </div>
       </main>
+
+      {/* For browser agents; people can ignore it. */}
+      <footer className="border-t border-border px-6 py-2 text-center text-xs text-muted-foreground">
+        {WEBMCP_HINT}
+      </footer>
     </div>
   );
 }

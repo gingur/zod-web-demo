@@ -30,13 +30,13 @@ interface ToolResult {
 }
 export interface ModelContext {
   registerTool(tool: ModelContextTool, options?: { signal?: AbortSignal }): unknown;
-  /** Chrome's origin-trial API; it ignores `signal`. */
+  /** Older origin-trial builds only; Chrome 156 has none and unregisters on `signal` abort. */
   unregisterTool?(name: string): void;
 }
 
 type WithModelContext = { modelContext?: ModelContext };
 
-/** The spec puts it on document; Chrome's origin trial (149–156) still serves navigator. */
+/** The spec and Chrome 156 put it on document; navigator is for older origin-trial builds. */
 export function findModelContext(): ModelContext | undefined {
   return (
     (document as Document & WithModelContext).modelContext ??
@@ -85,6 +85,7 @@ export function webMcpTools(host: WebMcpHost): ModelContextTool[] {
         }
         const before = host.getState();
         const raw = { name: tool.name, arguments: input };
+        // Chrome doesn't check input against inputSchema, so this is the only check.
         const applied = applyCall(before, raw);
         if (!applied.ok) return refused(applied.error);
         host.commit(before, applied.state);

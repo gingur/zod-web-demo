@@ -19,7 +19,8 @@ export const Idle: Story = {
   play: async ({ canvasElement }) => {
     const main = within(canvasElement).getByRole('main');
     await expect(main).toHaveAccessibleDescription(/WebMCP tools on document\.modelContext/);
-    await expect(main).toHaveAccessibleDescription(/dispatch window 'webmcp:provide'/);
+    await expect(main).toHaveAccessibleDescription(/window 'webmcp:provide' event/);
+    await expect(main).toHaveTextContent(/WebMCP tools on document\.modelContext/);
   },
 };
 

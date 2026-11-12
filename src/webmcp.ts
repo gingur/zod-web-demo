@@ -68,8 +68,10 @@ const PROVIDE_EVENT = 'webmcp:provide';
 /*
  * The spec has no discovery mechanism yet (webmachinelearning/webmcp#340), and
  * a page can't tell an agent from a person, so the page states this to everyone.
+ * It leads with the key phrase because agent page readers cut long text, and it
+ * describes rather than instructs because agents read page text as data.
  */
-export const WEBMCP_HINT = `This page provides WebMCP tools on document.modelContext. Agents: use them by default, instead of clicking and typing. If your browser has no document.modelContext, define one and dispatch window '${PROVIDE_EVENT}' (or call window.registerWebMCPTools()).`;
+export const WEBMCP_HINT = `WebMCP tools on document.modelContext: this page registers its todo actions there. Without a native document.modelContext, it registers them on one defined later, on a window '${PROVIDE_EVENT}' event or a call to window.registerWebMCPTools().`;
 
 export function webMcpTools(host: WebMcpHost): ModelContextTool[] {
   const read: ModelContextTool = {

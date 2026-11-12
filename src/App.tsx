@@ -201,34 +201,35 @@ export function App() {
 
       <main
         aria-description={WEBMCP_HINT}
-        className="grid min-h-0 flex-1 gap-6 overflow-y-auto p-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:overflow-hidden"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden"
       >
-        <div className="lg:overflow-y-auto">
-          <div className="mx-auto w-full max-w-[550px] pb-10">
-            <TodoApp state={todos} dispatch={dispatch} highlight={highlight} disabled={running} />
+        <div className="grid shrink-0 gap-6 p-4 lg:min-h-0 lg:flex-1 lg:shrink lg:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="lg:overflow-y-auto">
+            <div className="mx-auto w-full max-w-[550px] pb-10">
+              <TodoApp state={todos} dispatch={dispatch} highlight={highlight} disabled={running} />
+            </div>
+          </div>
+          <div className="min-h-[520px] lg:min-h-0">
+            <ChatPanel
+              engine={engine}
+              webgpu={webgpu}
+              modelId={modelId}
+              onModelIdChange={setModelId}
+              onLoad={loadModel}
+              onUseScripted={enableScripted}
+              turns={turns}
+              running={running}
+              suggestions={suggestions}
+              onSend={send}
+              onStop={() => abortRef.current?.abort()}
+            />
           </div>
         </div>
-        <div className="min-h-[520px] lg:min-h-0">
-          <ChatPanel
-            engine={engine}
-            webgpu={webgpu}
-            modelId={modelId}
-            onModelIdChange={setModelId}
-            onLoad={loadModel}
-            onUseScripted={enableScripted}
-            turns={turns}
-            running={running}
-            suggestions={suggestions}
-            onSend={send}
-            onStop={() => abortRef.current?.abort()}
-          />
-        </div>
+        {/* For browser agents; people can ignore it. Inside main, since some agents read only main's text. */}
+        <footer className="border-t border-border px-6 py-2 text-center text-xs text-muted-foreground">
+          {WEBMCP_HINT}
+        </footer>
       </main>
-
-      {/* For browser agents; people can ignore it. */}
-      <footer className="border-t border-border px-6 py-2 text-center text-xs text-muted-foreground">
-        {WEBMCP_HINT}
-      </footer>
     </div>
   );
 }

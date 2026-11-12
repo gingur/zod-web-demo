@@ -33,6 +33,15 @@ describe('WebMCP', () => {
     expect(tools.get('get_todos')?.annotations?.readOnlyHint).toBe(true);
   });
 
+  test('get_todos returns the list with ok, like every other result', async () => {
+    const { call } = setup();
+    expect(await call('get_todos', {})).toEqual({
+      ok: true,
+      todos: initialState.todos,
+      filter: 'all',
+    });
+  });
+
   test('a call changes the list through applyCall and reports what happened', async () => {
     const { call, state } = setup();
     const result = await call('add_todo', { title: '  Eggs  ' });

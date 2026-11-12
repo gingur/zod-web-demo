@@ -28,10 +28,7 @@ interface ModelContextTool {
  * content wrapper would only nest a second encoding, and Chrome ignores isError.
  */
 type TodoList = z.infer<typeof contextSchema>;
-type ToolResult =
-  | TodoList
-  | ({ ok: true; message: string } & TodoList)
-  | { ok: false; error: string };
+type ToolResult = ({ ok: true; message?: string } & TodoList) | { ok: false; error: string };
 export interface ModelContext {
   registerTool(tool: ModelContextTool, options?: { signal?: AbortSignal }): unknown;
   /** Older origin-trial builds only; Chrome 156 has none and unregisters on `signal` abort. */
@@ -72,7 +69,7 @@ export function webMcpTools(host: WebMcpHost): ModelContextTool[] {
       'Read the todo list: every todo with its id, title and done state, and which todos the list is showing. The other tools take ids from it.',
     inputSchema: z.toJSONSchema(z.object({})),
     annotations: { ...annotations, readOnlyHint: true },
-    execute: async () => list(host.getState()),
+    execute: async () => ({ ok: true, ...list(host.getState()) }),
   };
   const writes = TOOLS.map(
     (tool): ModelContextTool => ({

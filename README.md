@@ -25,7 +25,7 @@ To try it, use a Chrome or Edge that has WebMCP: the origin trial, or `chrome://
 ```js
 const tools = await document.modelContext.getTools();
 const add = tools.find((t) => t.name === 'add_todo');
-await document.modelContext.executeTool(add, JSON.stringify({ title: 'Buy eggs' }));
+await document.modelContext.executeTool(add, { title: 'Buy eggs' });
 ```
 
 ## Develop

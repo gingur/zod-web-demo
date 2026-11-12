@@ -14,7 +14,14 @@ type Story = StoryObj<typeof meta>;
 const titles = (canvas: ReturnType<typeof within>) =>
   canvas.queryAllByTestId('todo').map((li: HTMLElement) => li.textContent);
 
-export const Idle: Story = {};
+/** Agents read the accessibility tree, not comments, so it names the WebMCP tools. */
+export const Idle: Story = {
+  play: async ({ canvasElement }) => {
+    const main = within(canvasElement).getByRole('main');
+    await expect(main).toHaveAccessibleDescription(/document\.modelContext: get_todos, add_todo/);
+    await expect(main).toHaveAccessibleDescription(/set_filter\.$/);
+  },
+};
 
 /**
  * The path the live demo takes, with the scripted model: the first attempt

@@ -8,7 +8,7 @@ import { runPipeline } from '@/copilot/pipeline';
 import type { PastTurn } from '@/copilot/prompt';
 import { createScriptedModel, SUGGESTED_PROMPTS } from '@/copilot/scripted';
 import { DEFAULT_MODEL_ID, MODEL_OPTIONS, hasWebGPU, loadWebLLM } from '@/copilot/webllm';
-import { findModelContext, registerWebMcp } from '@/webmcp';
+import { WEBMCP_HINT, findModelContext, registerWebMcp } from '@/webmcp';
 
 const suggestions = SUGGESTED_PROMPTS.map((p) => p.text);
 
@@ -205,10 +205,14 @@ export function App() {
         </button>
       </header>
 
-      <main className="grid min-h-0 flex-1 gap-6 overflow-y-auto p-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:overflow-hidden">
+      <main
+        aria-description={WEBMCP_HINT}
+        className="grid min-h-0 flex-1 gap-6 overflow-y-auto p-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:overflow-hidden"
+      >
         <div className="lg:overflow-y-auto">
           <div className="mx-auto w-full max-w-[550px] pb-10">
             <TodoApp state={todos} dispatch={dispatch} highlight={highlight} disabled={running} />
+            <p className="mt-4 text-center text-xs text-muted-foreground">{WEBMCP_HINT}</p>
           </div>
         </div>
         <div className="min-h-[520px] lg:min-h-0">

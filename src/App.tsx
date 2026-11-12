@@ -8,7 +8,7 @@ import { runPipeline } from '@/copilot/pipeline';
 import type { PastTurn } from '@/copilot/prompt';
 import { createScriptedModel, SUGGESTED_PROMPTS } from '@/copilot/scripted';
 import { DEFAULT_MODEL_ID, MODEL_OPTIONS, hasWebGPU, loadWebLLM } from '@/copilot/webllm';
-import { WEBMCP_HINT, findModelContext, registerWebMcp } from '@/webmcp';
+import { WEBMCP_HINT, connectWebMcp } from '@/webmcp';
 
 const suggestions = SUGGESTED_PROMPTS.map((p) => p.text);
 
@@ -59,24 +59,18 @@ export function App() {
   };
 
   // Browser agents get the same tools through WebMCP; their changes flash like the assistant's.
-  useEffect(() => {
-    const modelContext = findModelContext();
-    if (modelContext === undefined) return;
-    const controller = new AbortController();
-    registerWebMcp(
-      modelContext,
-      {
+  useEffect(
+    () =>
+      connectWebMcp({
         getState: () => todosRef.current,
         busy: () => abortRef.current !== null,
         commit: (before, after) => {
           commit(after);
           setHighlight(touchedIds(before, after));
         },
-      },
-      controller.signal,
-    );
-    return () => controller.abort();
-  }, []);
+      }),
+    [],
+  );
 
   const updateTurn = (id: number, update: (t: Turn) => Turn) =>
     setTurns((ts) => ts.map((t) => (t.id === id ? update(t) : t)));

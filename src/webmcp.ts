@@ -38,7 +38,7 @@ export interface ModelContext {
 type WithModelContext = { modelContext?: ModelContext };
 
 /** The spec and Chrome 156 put it on document; navigator is for older origin-trial builds. */
-export function findModelContext(): ModelContext | undefined {
+function findModelContext(): ModelContext | undefined {
   return (
     (document as Document & WithModelContext).modelContext ??
     (navigator as Navigator & WithModelContext).modelContext
@@ -63,12 +63,14 @@ const list = (state: TodoState): TodoList => contextSchema.parse(state);
 const refused = (error: string): ToolResult => ({ ok: false, error });
 
 const GET_TODOS = 'get_todos';
+/** Not a standard: an agent whose browser lacks WebMCP dispatches this after defining its own modelContext. */
+const PROVIDE_EVENT = 'webmcp:provide';
 
 /*
  * The spec has no discovery mechanism yet (webmachinelearning/webmcp#340), and
  * a page can't tell an agent from a person, so the page states this to everyone.
  */
-export const WEBMCP_HINT = `This page provides WebMCP tools on document.modelContext: ${[GET_TODOS, ...TOOLS.map((t) => t.name)].join(', ')}.`;
+export const WEBMCP_HINT = `This page provides WebMCP tools on document.modelContext: ${[GET_TODOS, ...TOOLS.map((t) => t.name)].join(', ')}. If your browser has no document.modelContext, define one and dispatch window '${PROVIDE_EVENT}' (or call window.registerWebMCPTools()).`;
 
 export function webMcpTools(host: WebMcpHost): ModelContextTool[] {
   const read: ModelContextTool = {
@@ -121,4 +123,54 @@ export function registerWebMcp(mc: ModelContext, host: WebMcpHost, signal: Abort
       }
     });
   }
+}
+
+type RegisterTools = (mc?: ModelContext) => () => void;
+
+declare global {
+  interface Window {
+    registerWebMCPTools?: RegisterTools;
+  }
+}
+
+/**
+ * Registers the tools now if the browser has WebMCP, and later whenever an agent
+ * provides its own modelContext. Returns a cleanup that removes all of it.
+ */
+export function connectWebMcp(host: WebMcpHost): () => void {
+  // A native modelContext found at mount stays; the late path is only for agent-provided ones.
+  const native = findModelContext();
+  let current: { mc: ModelContext; cleanup: () => void } | undefined;
+
+  const registerTools: RegisterTools = (mc = findModelContext()) => {
+    if (mc === undefined || mc === current?.mc || (native !== undefined && mc !== native)) {
+      return current?.cleanup ?? (() => {});
+    }
+    current?.cleanup();
+    const controller = new AbortController();
+    registerWebMcp(mc, host, controller.signal);
+    const cleanup = () => {
+      controller.abort();
+      if (current?.mc === mc) current = undefined;
+    };
+    current = { mc, cleanup };
+    return cleanup;
+  };
+  const onProvide = (event: Event) => {
+    const detail: unknown = (event as CustomEvent).detail;
+    const provided =
+      typeof detail === 'object' && detail !== null && 'modelContext' in detail
+        ? (detail.modelContext as ModelContext)
+        : undefined;
+    registerTools(provided);
+  };
+
+  registerTools();
+  window.addEventListener(PROVIDE_EVENT, onProvide);
+  window.registerWebMCPTools = registerTools;
+  return () => {
+    window.removeEventListener(PROVIDE_EVENT, onProvide);
+    if (window.registerWebMCPTools === registerTools) delete window.registerWebMCPTools;
+    current?.cleanup();
+  };
 }

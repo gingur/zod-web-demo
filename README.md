@@ -20,13 +20,25 @@ Scripted mode replays the suggested prompts through the same pipeline without a 
 
 The page also offers its tools to agents outside it, through the browser's [WebMCP](https://webmachinelearning.github.io/webmcp/) API (`src/webmcp.ts`). They are the same seven tools, from the same Zod schemas, with the same checks, plus `get_todos` to read the list. A change made this way flashes in the list like an assistant change, and is refused while the in-page assistant is running. A refused call returns the reason, so the agent can fix it.
 
-To try it, use a Chrome or Edge that has WebMCP: the origin trial, or `chrome://flags/#enable-experimental-web-platform-features`. Then, in DevTools on the page:
+To try it, open the page in Chrome or Edge. No flag is needed: the page's origin-trial tokens turn WebMCP on. Then, in DevTools on the page:
 
 ```js
 const tools = await document.modelContext.getTools();
 const add = tools.find((t) => t.name === 'add_todo');
-await document.modelContext.executeTool(add, { title: 'Buy eggs' });
+JSON.parse(await document.modelContext.executeTool(add, { title: 'Buy eggs' }));
+// { ok: true, message: "Added 'Buy eggs'.", todos: [...], filter: 'all' }
+// A refused call: { ok: false, error: '...' }
 ```
+
+If the tokens have expired, `chrome://flags/#enable-experimental-web-platform-features` may turn it on instead (untested).
+
+### Try it with Claude
+
+Give Claude in Chrome this prompt:
+
+> Open https://gingur.github.io/zod-web-demo/ in Chrome, list the tools with document.modelContext.getTools(), then call add_todo with document.modelContext.executeTool(tool, { title: 'Get Beers with Troy' }) and show the result.
+
+The built-in browser in Claude Desktop has no WebMCP, even on sites with a token, so use Claude in Chrome.
 
 ## Develop
 

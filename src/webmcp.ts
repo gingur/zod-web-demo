@@ -23,11 +23,15 @@ interface ModelContextTool {
   annotations?: ToolAnnotations;
   execute: (input: Record<string, unknown>) => Promise<ToolResult>;
 }
-/** MCP's result shape: what Chrome's origin trial expects, and readable as plain JSON elsewhere. */
-interface ToolResult {
-  content: { type: 'text'; text: string }[];
-  isError?: true;
-}
+/*
+ * Plain JSON, which the spec allows. Chrome serializes it once; an MCP
+ * content wrapper would only nest a second encoding, and Chrome ignores isError.
+ */
+type TodoList = z.infer<typeof contextSchema>;
+type ToolResult =
+  | TodoList
+  | ({ ok: true; message: string } & TodoList)
+  | { ok: false; error: string };
 export interface ModelContext {
   registerTool(tool: ModelContextTool, options?: { signal?: AbortSignal }): unknown;
   /** Older origin-trial builds only; Chrome 156 has none and unregisters on `signal` abort. */
@@ -54,15 +58,12 @@ export interface WebMcpHost {
 // Titles are user text, so agents are told to read them as data.
 const annotations: ToolAnnotations = { untrustedContentHint: true };
 
-const text = (t: string): ToolResult => ({ content: [{ type: 'text', text: t }] });
-const list = (state: TodoState) => JSON.stringify(contextSchema.parse(state));
-const result = (reply: string, state: TodoState) =>
-  text(`${reply}\nThe todo list now: ${list(state)}`);
+const list = (state: TodoState): TodoList => contextSchema.parse(state);
 /*
  * A refused call is returned, not thrown: Chrome hands a thrown error's
  * message only to the page's console, and the agent needs it to fix the call.
  */
-const refused = (reason: string): ToolResult => ({ ...text(reason), isError: true });
+const refused = (error: string): ToolResult => ({ ok: false, error });
 
 export function webMcpTools(host: WebMcpHost): ModelContextTool[] {
   const read: ModelContextTool = {
@@ -71,7 +72,7 @@ export function webMcpTools(host: WebMcpHost): ModelContextTool[] {
       'Read the todo list: every todo with its id, title and done state, and which todos the list is showing. The other tools take ids from it.',
     inputSchema: z.toJSONSchema(z.object({})),
     annotations: { ...annotations, readOnlyHint: true },
-    execute: async () => text(list(host.getState())),
+    execute: async () => list(host.getState()),
   };
   const writes = TOOLS.map(
     (tool): ModelContextTool => ({
@@ -90,7 +91,8 @@ export function webMcpTools(host: WebMcpHost): ModelContextTool[] {
         if (!applied.ok) return refused(applied.error);
         host.commit(before, applied.state);
         // Parsed again so the report shows the stored (trimmed) title.
-        return result(describeCalls(before, [callSchema.parse(raw)]).join(' '), applied.state);
+        const message = describeCalls(before, [callSchema.parse(raw)]).join(' ');
+        return { ok: true, message, ...list(applied.state) };
       },
     }),
   );

@@ -14,7 +14,49 @@ type Story = StoryObj<typeof meta>;
 const titles = (canvas: ReturnType<typeof within>) =>
   canvas.queryAllByTestId('todo').map((li: HTMLElement) => li.textContent);
 
-export const Idle: Story = {};
+/** Agents read the accessibility tree, not comments, so it points them at the WebMCP tools. */
+export const Idle: Story = {
+  play: async ({ canvasElement }) => {
+    const main = within(canvasElement).getByRole('main');
+    await expect(main).toHaveAccessibleDescription(/WebMCP tools on document\.modelContext/);
+    await expect(main).toHaveAccessibleDescription(/dispatch window 'webmcp:provide'/);
+  },
+};
+
+type WithModelContext = { modelContext?: unknown };
+
+/**
+ * A browser without WebMCP: an agent defines its own modelContext after the
+ * page loaded, and the tools register then, once, with no reload.
+ */
+export const RegistersLate: Story = {
+  play: async () => {
+    const doc = document as Document & WithModelContext;
+    const registered: string[] = [];
+    doc.modelContext = { registerTool: (t: { name: string }) => void registered.push(t.name) };
+    try {
+      window.dispatchEvent(new CustomEvent('webmcp:provide'));
+      await expect(registered).toHaveLength(8);
+      await expect(registered).toContain('add_todo');
+      window.registerWebMCPTools?.();
+      window.registerWebMCPTools?.();
+      await expect(registered).toHaveLength(8);
+
+      // A different agent-provided context replaces the old registration.
+      const other: string[] = [];
+      window.dispatchEvent(
+        new CustomEvent('webmcp:provide', {
+          detail: {
+            modelContext: { registerTool: (t: { name: string }) => void other.push(t.name) },
+          },
+        }),
+      );
+      await expect(other).toHaveLength(8);
+    } finally {
+      delete doc.modelContext;
+    }
+  },
+};
 
 /**
  * The path the live demo takes, with the scripted model: the first attempt

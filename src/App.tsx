@@ -8,7 +8,7 @@ import { runPipeline } from '@/copilot/pipeline';
 import type { PastTurn } from '@/copilot/prompt';
 import { createScriptedModel, SUGGESTED_PROMPTS } from '@/copilot/scripted';
 import { DEFAULT_MODEL_ID, MODEL_OPTIONS, hasWebGPU, loadWebLLM } from '@/copilot/webllm';
-import { findModelContext, registerWebMcp } from '@/webmcp';
+import { WEBMCP_HINT, connectWebMcp } from '@/webmcp';
 
 const suggestions = SUGGESTED_PROMPTS.map((p) => p.text);
 
@@ -59,24 +59,18 @@ export function App() {
   };
 
   // Browser agents get the same tools through WebMCP; their changes flash like the assistant's.
-  useEffect(() => {
-    const modelContext = findModelContext();
-    if (modelContext === undefined) return;
-    const controller = new AbortController();
-    registerWebMcp(
-      modelContext,
-      {
+  useEffect(
+    () =>
+      connectWebMcp({
         getState: () => todosRef.current,
         busy: () => abortRef.current !== null,
         commit: (before, after) => {
           commit(after);
           setHighlight(touchedIds(before, after));
         },
-      },
-      controller.signal,
-    );
-    return () => controller.abort();
-  }, []);
+      }),
+    [],
+  );
 
   const updateTurn = (id: number, update: (t: Turn) => Turn) =>
     setTurns((ts) => ts.map((t) => (t.id === id ? update(t) : t)));
@@ -205,7 +199,10 @@ export function App() {
         </button>
       </header>
 
-      <main className="grid min-h-0 flex-1 gap-6 overflow-y-auto p-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:overflow-hidden">
+      <main
+        aria-description={WEBMCP_HINT}
+        className="grid min-h-0 flex-1 gap-6 overflow-y-auto p-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:overflow-hidden"
+      >
         <div className="lg:overflow-y-auto">
           <div className="mx-auto w-full max-w-[550px] pb-10">
             <TodoApp state={todos} dispatch={dispatch} highlight={highlight} disabled={running} />
@@ -227,6 +224,11 @@ export function App() {
           />
         </div>
       </main>
+
+      {/* For browser agents; people can ignore it. */}
+      <footer className="border-t border-border px-6 py-2 text-center text-xs text-muted-foreground">
+        {WEBMCP_HINT}
+      </footer>
     </div>
   );
 }

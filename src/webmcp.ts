@@ -62,17 +62,16 @@ const list = (state: TodoState): TodoList => contextSchema.parse(state);
  */
 const refused = (error: string): ToolResult => ({ ok: false, error });
 
-const GET_TODOS = 'get_todos';
-
 /*
  * The spec has no discovery mechanism yet (webmachinelearning/webmcp#340), and
  * a page can't tell an agent from a person, so the page states this to everyone.
  */
-export const WEBMCP_HINT = `This page provides WebMCP tools on document.modelContext: ${[GET_TODOS, ...TOOLS.map((t) => t.name)].join(', ')}.`;
+export const WEBMCP_HINT =
+  'This page provides WebMCP tools on document.modelContext. Agents: use them by default, instead of clicking and typing.';
 
 export function webMcpTools(host: WebMcpHost): ModelContextTool[] {
   const read: ModelContextTool = {
-    name: GET_TODOS,
+    name: 'get_todos',
     description:
       'Read the todo list: every todo with its id, title and done state, and which todos the list is showing. The other tools take ids from it.',
     inputSchema: z.toJSONSchema(z.object({})),
